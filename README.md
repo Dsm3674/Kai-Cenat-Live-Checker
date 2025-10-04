@@ -1,6 +1,6 @@
-Certainly! Here's a well-formatted version of your README content using Markdown syntax for GitHub. You can copy this directly into your README.md file:
 
-```markdown
+
+``markdown
 # Kai Cenat Live Checker
 
 A Python-based tool that monitors Twitch streamers (like Kai Cenat) and instantly notifies you when they go live.  
@@ -8,7 +8,7 @@ Get alerts via desktop notifications or Discord webhooks — fully customizable 
 
 ---
 
-## Features
+### Features
 
 - Monitor one or multiple Twitch streamers  
 - Desktop notifications using [plyer](https://plyer.readthedocs.io/en/latest/)  
