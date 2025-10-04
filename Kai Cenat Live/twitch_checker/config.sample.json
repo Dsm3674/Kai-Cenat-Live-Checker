@@ -1,0 +1,11 @@
+
+{
+"client_id": "YOUR_CLIENT_ID_HERE",
+"client_secret": "YOUR_CLIENT_SECRET_HERE",
+"streamers": ["kaicenat"],
+"check_interval": 60,
+"discord_webhook": "",
+"enable_desktop_notifications": true,
+"enable_discord_notifications": false,
+"log_level": "INFO"
+}
