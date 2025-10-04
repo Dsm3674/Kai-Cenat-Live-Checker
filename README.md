@@ -1,6 +1,6 @@
 
 
-``markdown
+
 # Kai Cenat Live Checker
 
 A Python-based tool that monitors Twitch streamers (like Kai Cenat) and instantly notifies you when they go live.  
