@@ -6,6 +6,8 @@
 A Python-based tool that monitors Twitch streamers (like Kai Cenat) and instantly notifies you when they go live.  
 Get alerts via desktop notifications or Discord webhooks — fully customizable and easy to run.
 
+(So far its currently Kai Cenat, I will add more like IShowSpeed later on).
+
 ---
 
 ### Features
