@@ -12,17 +12,17 @@
       text-align: center;
     }
   </style>
+  <link rel="stylesheet" href="kaiCenat.css">
 </head>
 <h1>Lets see if Kai Cenat is live:</h1>
 <br>
 <p>If the screen is blank he isn't live otherwise he is</p>
-  <link rel = "stylesheet" href = kaiCenat.css>
 <body>
   <div id="liveBanner">🔥 Kai Cenat is LIVE on Twitch! 🥭 🔥</div>
 
   <script>
-    const clientId = '1xj42qy0yqjbxndpd4iaj0mz8swws1';
-    const accessToken = 'em96hzk9n2ov2acjvqji2ywqqsy4oz';
+    const clientId = 'YOUR_CLIENT_ID';
+    const accessToken = 'YOUR_ACCESS_TOKEN';
     const userLogin = 'kaicenat';
 
     async function checkIfLive() {
@@ -53,8 +53,9 @@
     }
 
     checkIfLive();
-    setInterval(checkIfLive, 60000); // every 60 seconds
+    setInterval(checkIfLive, 60000);
   </script>
 </body>
 </html>
+
 
