@@ -1,3 +1,20 @@
+"""
+====================================================
+ KAI CENAT LIVE CHECKER — BACKEND ENGINE (v2.5)
+====================================================
+A Python tool to monitor Twitch streamers (like Kai Cenat)
+and send instant notifications when they go live.
+
+Features:
+  • Multi-streamer monitoring
+  • Desktop + Discord alerts
+  • Event logging and uptime tracking
+  • Cross-platform support
+
+Author: Divyanshu Matam Somasekhar (Dsm3674)
+====================================================
+"""
+
 import requests
 import time
 import json
@@ -8,17 +25,18 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+# Optional desktop notifications
 try:
     from plyer import notification
     NOTIFICATIONS_AVAILABLE = True
 except ImportError:
     NOTIFICATIONS_AVAILABLE = False
-    print("Install 'plyer' for desktop notifications: pip install plyer")
+    print("⚠️  Install 'plyer' for desktop notifications: pip install plyer")
 
 
 @dataclass
 class StreamInfo:
-    """Data class to store stream information"""
+    """Structured Twitch stream data"""
     user_name: str
     user_login: str
     title: str
@@ -30,22 +48,20 @@ class StreamInfo:
 
 
 class TwitchLiveChecker:
-    """
-    Advanced Twitch Live Checker
-    Monitors multiple Twitch streamers and sends notifications when they go live
-    """
+    """Main Twitch monitoring engine"""
 
     def __init__(self, config_path: str = "config.json"):
         self.config_path = Path(config_path)
         self.config = self.load_config()
-        self.setup_logging()
+        self.logger = self.setup_logging()
         self.access_token = None
         self.stream_status = {}
         self.authenticate()
 
+    # ---------------------- CONFIG ----------------------
     def load_config(self) -> Dict:
-        """Load configuration from JSON file or create default"""
-        default_config = {
+        """Load configuration or create a default one"""
+        defaults = {
             "client_id": "YOUR_CLIENT_ID_HERE",
             "client_secret": "YOUR_CLIENT_SECRET_HERE",
             "streamers": ["kaicenat"],
@@ -55,210 +71,217 @@ class TwitchLiveChecker:
             "enable_discord_notifications": False,
             "log_level": "INFO"
         }
-        if os.path.exists(self.config_path):
-            with open(self.config_path, 'r') as f:
-                config = json.load(f)
-                default_config.update(config)
-                return default_config
+
+        if self.config_path.exists():
+            with open(self.config_path, "r") as f:
+                user_cfg = json.load(f)
+            defaults.update(user_cfg)
         else:
-            with open(self.config_path, 'w') as f:
-                json.dump(default_config, f, indent=4)
-            print(f"Created default config file: {self.config_path}")
-            return default_config
+            with open(self.config_path, "w") as f:
+                json.dump(defaults, f, indent=4)
+            print(f"📝 Created default config at {self.config_path}")
+        return defaults
 
+    # ---------------------- LOGGING ----------------------
     def setup_logging(self):
-        """Setup logging configuration"""
-        log_dir = Path("logs")
-        log_dir.mkdir(exist_ok=True)
-        log_level = getattr(logging, self.config.get("log_level", "INFO"), logging.INFO)
-        logging.basicConfig(
-            level=log_level,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_dir / "twitch_checker.log"),
-                logging.StreamHandler()
-            ]
-        )
-        self.logger = logging.getLogger("TwitchChecker")
+        """Configure logger for console + file output"""
+        logs_dir = Path("logs")
+        logs_dir.mkdir(exist_ok=True)
+        level = getattr(logging, self.config.get("log_level", "INFO").upper(), logging.INFO)
+        formatter = logging.Formatter("%(asctime)s — %(levelname)s — %(message)s")
 
+        # File handler
+        file_handler = logging.FileHandler(logs_dir / "twitch_checker.log", encoding="utf-8")
+        file_handler.setFormatter(formatter)
+
+        # Console handler
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+
+        logger = logging.getLogger("TwitchChecker")
+        logger.setLevel(level)
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
+        return logger
+
+    # ---------------------- AUTH ----------------------
     def authenticate(self):
-        """Authenticate with Twitch API using OAuth Client Credentials flow"""
+        """Authenticate via Twitch OAuth client credentials"""
         url = "https://id.twitch.tv/oauth2/token"
         params = {
             "client_id": self.config["client_id"],
             "client_secret": self.config["client_secret"],
             "grant_type": "client_credentials"
         }
-        response = requests.post(url, params=params)
-        response.raise_for_status()
-        data = response.json()
-        self.access_token = data["access_token"]
-        self.logger.info("Authenticated with Twitch API")
+        try:
+            response = requests.post(url, params=params, timeout=10)
+            response.raise_for_status()
+            self.access_token = response.json()["access_token"]
+            self.logger.info("✅ Successfully authenticated with Twitch API.")
+        except Exception as e:
+            self.logger.error("❌ Authentication failed. Check credentials.", exc_info=True)
+            raise e
 
     def get_headers(self) -> Dict[str, str]:
-        """Get headers for Twitch API requests"""
+        """Return standard Twitch headers"""
         return {
             "Client-ID": self.config["client_id"],
             "Authorization": f"Bearer {self.access_token}"
         }
 
+    # ---------------------- CORE ----------------------
     def check_stream_status(self, username: str) -> Optional[StreamInfo]:
-        """Check if a streamer is currently live"""
+        """Query Twitch API for stream status"""
         url = "https://api.twitch.tv/helix/streams"
-        params = {"user_login": username}
-        response = requests.get(url, headers=self.get_headers(), params=params)
-        response.raise_for_status()
-        data = response.json()
-        if data["data"]:
-            d = data["data"][0]
-            return StreamInfo(
-                user_name=d["user_name"],
-                user_login=d["user_login"],
-                title=d["title"],
-                game_name=d["game_name"],
-                viewer_count=d["viewer_count"],
-                started_at=d["started_at"],
-                thumbnail_url=d["thumbnail_url"],
-                is_live=True
-            )
-        else:
-            return StreamInfo(
-                user_name=username,
-                user_login=username,
-                title="",
-                game_name="",
-                viewer_count=0,
-                started_at="",
-                thumbnail_url="",
-                is_live=False
-            )
+        try:
+            resp = requests.get(url, headers=self.get_headers(), params={"user_login": username}, timeout=8)
+            resp.raise_for_status()
+            data = resp.json().get("data", [])
+        except requests.RequestException as e:
+            self.logger.error(f"Network error checking {username}: {e}")
+            return None
 
-    def send_desktop_notification(self, stream_info: StreamInfo):
-        """Send desktop notification when streamer goes live"""
-        if not NOTIFICATIONS_AVAILABLE or not self.config.get("enable_desktop_notifications"):
+        if not data:
+            return StreamInfo(username, username, "", "", 0, "", "", False)
+
+        d = data[0]
+        return StreamInfo(
+            user_name=d.get("user_name", username),
+            user_login=d.get("user_login", username),
+            title=d.get("title", ""),
+            game_name=d.get("game_name", ""),
+            viewer_count=d.get("viewer_count", 0),
+            started_at=d.get("started_at", ""),
+            thumbnail_url=d.get("thumbnail_url", ""),
+            is_live=True
+        )
+
+    # ---------------------- NOTIFICATIONS ----------------------
+    def send_desktop_notification(self, info: StreamInfo):
+        """Pop a desktop notification"""
+        if not (NOTIFICATIONS_AVAILABLE and self.config["enable_desktop_notifications"]):
             return
         try:
             notification.notify(
-                title=f"{stream_info.user_name} is LIVE! 🔴",
-                message=f"Playing: {stream_info.game_name}\n{stream_info.title}",
+                title=f"🔴 {info.user_name} is LIVE!",
+                message=f"{info.title} — {info.viewer_count} viewers\nPlaying: {info.game_name}",
                 app_name="Twitch Live Checker",
-                timeout=10
+                timeout=8
             )
         except Exception as e:
-            self.logger.error(f"Notification error: {e}")
+            self.logger.warning(f"Notification failed: {e}")
 
-    def send_discord_webhook(self, stream_info: StreamInfo):
-        """Send Discord webhook notification when streamer goes live"""
-        webhook_url = self.config.get("discord_webhook", "")
-        if not webhook_url or not self.config.get("enable_discord_notifications"):
+    def send_discord_webhook(self, info: StreamInfo):
+        """Send a Discord webhook message"""
+        if not (self.config["enable_discord_notifications"] and self.config["discord_webhook"]):
             return
+
         payload = {
-            "content": f"@everyone {stream_info.user_name} just went live!",
+            "content": f"@everyone **{info.user_name}** just went LIVE! 🔴",
             "embeds": [{
-                "title": f"{stream_info.user_name} is LIVE! 🔴",
-                "description": stream_info.title,
-                "url": f"https://twitch.tv/{stream_info.user_login}",
-                "color": 0x9147FF
+                "title": info.title or "Live Now!",
+                "url": f"https://twitch.tv/{info.user_login}",
+                "color": 0x9147FF,
+                "fields": [
+                    {"name": "Game", "value": info.game_name or "Unknown", "inline": True},
+                    {"name": "Viewers", "value": str(info.viewer_count), "inline": True}
+                ]
             }]
         }
         try:
-            requests.post(webhook_url, json=payload)
+            requests.post(self.config["discord_webhook"], json=payload, timeout=5)
         except Exception as e:
-            self.logger.error(f"Discord webhook error: {e}")
+            self.logger.warning(f"Discord webhook error: {e}")
 
-    def log_stream_event(self, stream_info: StreamInfo, event_type: str):
-        """Log stream events to a file"""
-        log_dir = Path("stream_logs")
-        log_dir.mkdir(exist_ok=True)
-        file = log_dir / f"{stream_info.user_login}_history.json"
-        event = {
-            "timestamp": datetime.now().isoformat(),
-            "event_type": event_type,
-            "title": stream_info.title,
-            "game": stream_info.game_name,
-            "viewers": stream_info.viewer_count
+    # ---------------------- LOGGING ----------------------
+    def log_stream_event(self, info: StreamInfo, event: str):
+        """Save stream events to history JSON"""
+        logs_dir = Path("stream_logs")
+        logs_dir.mkdir(exist_ok=True)
+        file = logs_dir / f"{info.user_login}_history.json"
+        entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "event": event,
+            "title": info.title,
+            "game": info.game_name,
+            "viewers": info.viewer_count
         }
-        if file.exists():
-            with open(file, 'r') as f:
-                logs = json.load(f)
-        else:
-            logs = []
-        logs.append(event)
-        with open(file, 'w') as f:
-            json.dump(logs[-100:], f, indent=2)
+        try:
+            if file.exists():
+                with open(file, "r") as f:
+                    existing = json.load(f)
+            else:
+                existing = []
+        except json.JSONDecodeError:
+            existing = []
+        existing.append(entry)
+        with open(file, "w") as f:
+            json.dump(existing[-200:], f, indent=2)
 
     def format_uptime(self, started_at: str) -> str:
-        """Calculate and format stream uptime"""
+        """Return stream uptime as h/m"""
         if not started_at:
             return "0m"
-        start = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
-        delta = datetime.now(start.tzinfo) - start
-        h = int(delta.total_seconds() // 3600)
-        m = int((delta.total_seconds() % 3600) // 60)
+        start = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        diff = datetime.now(start.tzinfo) - start
+        h, m = divmod(int(diff.total_seconds() // 60), 60)
         return f"{h}h {m}m" if h else f"{m}m"
 
+    # ---------------------- MONITOR ----------------------
     def monitor_streamers(self):
         """Main monitoring loop"""
-        self.logger.info("Starting Twitch Live Checker...")
+        self.logger.info("🚀 Twitch Live Checker started.")
         for s in self.config["streamers"]:
             self.stream_status[s] = False
+
         try:
             while True:
-                for streamer in self.config["streamers"]:
-                    stream_info = self.check_stream_status(streamer)
-                    if not stream_info:
+                for username in self.config["streamers"]:
+                    info = self.check_stream_status(username)
+                    if not info:
                         continue
-                    was_live = self.stream_status.get(streamer, False)
-                    is_live = stream_info.is_live
 
-                    if is_live and not was_live:
-                        self.logger.info(f"🔴 {stream_info.user_name} is now LIVE!")
-                        self.logger.info(f"   Title: {stream_info.title}")
-                        self.logger.info(f"   Game: {stream_info.game_name}")
-                        self.logger.info(f"   Viewers: {stream_info.viewer_count}")
-                        self.send_desktop_notification(stream_info)
-                        self.send_discord_webhook(stream_info)
-                        self.log_stream_event(stream_info, "went_live")
+                    prev_live = self.stream_status.get(username, False)
+                    now_live = info.is_live
 
-                    elif is_live and was_live:
-                        uptime = self.format_uptime(stream_info.started_at)
-                        self.logger.info(f"✓ {stream_info.user_name} - Live for {uptime} - {stream_info.viewer_count} viewers")
+                    if now_live and not prev_live:
+                        self.logger.info(f"🔴 {info.user_name} is now LIVE! ({info.viewer_count} viewers)")
+                        self.logger.info(f"   Title: {info.title}")
+                        self.logger.info(f"   Game: {info.game_name}")
+                        self.send_desktop_notification(info)
+                        self.send_discord_webhook(info)
+                        self.log_stream_event(info, "went_live")
 
-                    elif not is_live and was_live:
-                        self.logger.info(f"⚫ {stream_info.user_name} went offline")
-                        self.log_stream_event(stream_info, "went_offline")
+                    elif not now_live and prev_live:
+                        self.logger.info(f"⚫ {info.user_name} went offline.")
+                        self.log_stream_event(info, "went_offline")
 
-                    else:
-                        self.logger.debug(f"⚫ {stream_info.user_name} is offline")
+                    elif now_live:
+                        uptime = self.format_uptime(info.started_at)
+                        self.logger.info(f"🟣 {info.user_name} — {uptime} — {info.viewer_count} viewers")
 
-                    self.stream_status[streamer] = is_live
+                    self.stream_status[username] = now_live
 
                 time.sleep(self.config["check_interval"])
+
         except KeyboardInterrupt:
-            self.logger.info("\nStopping Twitch Live Checker...")
+            self.logger.info("🛑 Stopped Twitch Live Checker manually.")
         except Exception as e:
             self.logger.error(f"Unexpected error: {e}", exc_info=True)
 
-
+# ---------------------- MAIN ENTRY ----------------------
 def main():
-    """Main entry point"""
     print("=" * 60)
-    print("          TWITCH LIVE CHECKER v2.0")
+    print("💜  KAI CENAT LIVE CHECKER — BACKEND")
     print("=" * 60)
-    print("\nSetup Instructions:")
-    print("1. Go to https://dev.twitch.tv/console/apps")
-    print("2. Create a new application")
-    print("3. Copy your Client ID and Client Secret")
-    print("4. Update config.json with your credentials")
-    print("5. Add streamers you want to monitor")
-    print("\nOptional: pip install plyer (for desktop notifications)")
-    print("=" * 60)
-    print()
+    print(" Monitors Twitch streamers & sends notifications.")
+    print(" Edit config.json to customize streamers, intervals, or alerts.\n")
 
     checker = TwitchLiveChecker()
-    if checker.config["client_id"] == "YOUR_CLIENT_ID_HERE":
-        print("⚠️  Please update config.json with your Twitch API credentials!")
+    if checker.config["client_id"].startswith("YOUR"):
+        print("⚠️  Update config.json with your Twitch credentials before running!")
         return
+
     checker.monitor_streamers()
 
 
