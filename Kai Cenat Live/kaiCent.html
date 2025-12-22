@@ -2,6 +2,7 @@
 <html>
 <head>
   <title>Kai Cenat Live Checker</title>
+  <link rel="stylesheet" href="kaiCenat.css">
   <style>
     #liveBanner {
       display: none;
@@ -12,35 +13,30 @@
       text-align: center;
     }
   </style>
-  <link rel="stylesheet" href="kaiCenat.css">
 </head>
-<h1>Lets see if Kai Cenat is live:</h1>
-<br>
-<p>If the screen is blank he isn't live otherwise he is</p>
 <body>
+  <h1>Lets see if Kai Cenat is live:</h1>
+  <br>
+  <p>If the screen is blank he isn't live otherwise he is</p>
+  
   <div id="liveBanner">🔥 Kai Cenat is LIVE on Twitch! 🥭 🔥</div>
 
   <script>
-    const clientId = 'YOUR_CLIENT_ID';
-    const accessToken = 'YOUR_ACCESS_TOKEN';
+    // ✅ FIXED: Now uses your backend API instead of direct Twitch API
     const userLogin = 'kaicenat';
 
     async function checkIfLive() {
       try {
-        const res = await fetch(`https://api.twitch.tv/helix/streams?user_login=${userLogin}`, {
-          headers: {
-            'Client-ID': clientId,
-            'Authorization': `Bearer ${accessToken}`
-          }
-        });
+        // Call your backend API (no credentials needed in frontend!)
+        const res = await fetch(`http://localhost:5050/api/live/${userLogin}`);
 
         if (!res.ok) {
-          console.error('Twitch API error:', res.status, res.statusText);
+          console.error('Backend API error:', res.status, res.statusText);
           return;
         }
 
         const data = await res.json();
-        const isLive = data.data && data.data.length > 0;
+        const isLive = data.live === true;
 
         if (isLive) {
           document.getElementById('liveBanner').style.display = 'block';
@@ -52,10 +48,9 @@
       }
     }
 
+    // Check immediately and then every minute
     checkIfLive();
     setInterval(checkIfLive, 60000);
   </script>
 </body>
 </html>
-
-
