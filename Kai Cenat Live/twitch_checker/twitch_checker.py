@@ -1,8 +1,12 @@
 """
 ====================================================
- KAI CENAT LIVE CHECKER — BACKEND ENGINE (v3.0)
+ KAI CENAT LIVE CHECKER — BACKEND ENGINE (v3.1)
 ====================================================
-Exposes a local HTTP API for a static website.
+• Exposes a local HTTP API for a static website
+• Handles CORS for browsers
+• Automatically refreshes Twitch tokens
+• Shields against Twitch outages
+• Gunicorn / production compatible
 ====================================================
 """
 
@@ -15,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from flask import Flask, jsonify
+from flask_cors import CORS
 
 # ---------------------- DATA ----------------------
 @dataclass
@@ -29,7 +34,9 @@ class StreamInfo:
 
 # ---------------------- APP ----------------------
 app = Flask(__name__)
+CORS(app)  # ✅ Browser-safe
 
+# ---------------------- CORE CLASS ----------------------
 class TwitchLiveChecker:
     def __init__(self, config_path: str = "config.json"):
         self.config_path = Path(config_path)
@@ -63,6 +70,7 @@ class TwitchLiveChecker:
 
     # ---------------- AUTH ----------------
     def authenticate(self):
+        self.logger.info("🔑 Authenticating with Twitch…")
         r = requests.post(
             "https://id.twitch.tv/oauth2/token",
             params={
@@ -74,7 +82,7 @@ class TwitchLiveChecker:
         )
         r.raise_for_status()
         self.access_token = r.json()["access_token"]
-        self.logger.info("✅ Authenticated with Twitch")
+        self.logger.info("✅ Twitch authentication successful")
 
     def headers(self):
         return {
@@ -84,26 +92,43 @@ class TwitchLiveChecker:
 
     # ---------------- CORE ----------------
     def check_stream(self, username: str) -> StreamInfo:
-        r = requests.get(
-            "https://api.twitch.tv/helix/streams",
-            headers=self.headers(),
-            params={"user_login": username},
-            timeout=8
-        )
-        r.raise_for_status()
-        data = r.json().get("data", [])
+        try:
+            r = requests.get(
+                "https://api.twitch.tv/helix/streams",
+                headers=self.headers(),
+                params={"user_login": username},
+                timeout=8
+            )
+
+            # 🔁 Token expired → refresh once
+            if r.status_code == 401:
+                self.logger.warning("♻️ Twitch token expired — refreshing")
+                self.authenticate()
+                r = requests.get(
+                    "https://api.twitch.tv/helix/streams",
+                    headers=self.headers(),
+                    params={"user_login": username},
+                    timeout=8
+                )
+
+            r.raise_for_status()
+            data = r.json().get("data", [])
+
+        except requests.RequestException as e:
+            self.logger.error(f"❌ Twitch API error: {e}")
+            return StreamInfo(username, username, "", "", 0, "", False)
 
         if not data:
             return StreamInfo(username, username, "", "", 0, "", False)
 
         d = data[0]
         return StreamInfo(
-            user_name=d["user_name"],
-            user_login=d["user_login"],
-            title=d["title"],
-            game_name=d["game_name"],
-            viewer_count=d["viewer_count"],
-            started_at=d["started_at"],
+            user_name=d.get("user_name", username),
+            user_login=d.get("user_login", username),
+            title=d.get("title", ""),
+            game_name=d.get("game_name", ""),
+            viewer_count=d.get("viewer_count", 0),
+            started_at=d.get("started_at", ""),
             is_live=True
         )
 
@@ -121,7 +146,11 @@ checker = TwitchLiveChecker()
 # ---------------- API ----------------
 @app.route("/api/live/<username>")
 def api_live(username):
-    info = checker.check_stream(username)
+    try:
+        info = checker.check_stream(username)
+    except Exception as e:
+        checker.logger.error(f"🔥 Backend failure: {e}")
+        return jsonify({"live": False, "error": "backend_failure"}), 500
 
     if not info.is_live:
         return jsonify({"live": False})
@@ -138,5 +167,7 @@ def api_live(username):
 # ---------------- ENTRY ----------------
 if __name__ == "__main__":
     print("🚀 Backend API running at http://localhost:5050")
-    app.run(port=5050)
+    app.run(host="0.0.0.0", port=5050)
+
+
 
