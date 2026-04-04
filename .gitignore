@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+/data/
+/twitch_checker/config.json
