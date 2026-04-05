@@ -1,5 +1,14 @@
 {
-  "client_id": "kq2w4clfh4np36th4c5uy8gklv3ubu",
-  "client_secret": "zu47i6zogcp0qeb54a0dp9v5hm15z3",
-  "redirect_uri": "http://localhost:5050/auth/callback"
+  "client_id": "YOUR_CLIENT_ID_HERE",
+  "client_secret": "YOUR_CLIENT_SECRET_HERE",
+  "streamers": [
+    "kaicenat",
+    "pokimane",
+    "caseoh_"
+  ],
+  "check_interval": 60,
+  "discord_webhook": "",
+  "enable_discord_notifications": false,
+  "history_limit": 8,
+  "frontend_title": "Twitch Live Radar"
 }
