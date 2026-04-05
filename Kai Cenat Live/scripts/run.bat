@@ -1,20 +1,22 @@
-
 @echo off
-setlocal EnableDelayedExpansion
+setlocal
 pushd %~dp0\..
 
-
 if not exist .venv (
-py -3 -m venv .venv
+  py -3 -m venv .venv
 )
+
 call .venv\Scripts\activate
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 
-
-cd twitch_checker
-if not exist config.json (
-copy config.sample.json config.json >nul
-echo Created twitch_checker\config.json — fill in your Client ID/Secret.
+if not exist twitch_checker\config.json (
+  copy twitch_checker\config.sample.json twitch_checker\config.json >nul
+  echo Created twitch_checker\config.json.
+  echo Add your Twitch client credentials or use a local .env file.
 )
-py -3 twitch_checker.py
+
+echo Starting Twitch dashboard on http://127.0.0.1:5050
+python -m twitch_checker.twitch_checker
+
 popd
