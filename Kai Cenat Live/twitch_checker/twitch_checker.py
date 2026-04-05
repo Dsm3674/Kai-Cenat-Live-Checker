@@ -516,10 +516,10 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    print("Twitch Live Radar is running at http://127.0.0.1:5050")
+    host = os.getenv("HOST", "0.0.0.0")
+    port = parse_int(os.getenv("PORT", "5050"), 5050)
+    print(f"Twitch Live Radar is running on {host}:{port}")
     print("Use twitch_checker/config.json or .env to add real Twitch credentials.")
-    app.run(host="127.0.0.1", port=5050, debug=True)
-
-
+    app.run(host=host, port=port, debug=False)
 
 
