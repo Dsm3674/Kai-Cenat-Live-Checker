@@ -1,11 +1,15 @@
 
 {
-"client_id": "YOUR_CLIENT_ID_HERE",
-"client_secret": "YOUR_CLIENT_SECRET_HERE",
-"streamers": ["kaicenat"],
-"check_interval": 60,
-"discord_webhook": "",
-"enable_desktop_notifications": true,
-"enable_discord_notifications": false,
-"log_level": "INFO"
+  "client_id": "YOUR_CLIENT_ID_HERE",
+  "client_secret": "YOUR_CLIENT_SECRET_HERE",
+  "streamers": [
+    "kaicenat",
+    "pokimane",
+    "caseoh_"
+  ],
+  "check_interval": 60,
+  "discord_webhook": "",
+  "enable_discord_notifications": false,
+  "history_limit": 8,
+  "frontend_title": "Twitch Live Radar"
 }
