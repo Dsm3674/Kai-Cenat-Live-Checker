@@ -10,63 +10,151 @@
   <div class="page-shell">
     <header class="hero">
       <div class="hero-copy">
-        <p class="eyebrow">Real-time Twitch tracking</p>
+        <p class="eyebrow">Twitch analytics cockpit</p>
         <h1 id="appTitle">Twitch Live Radar</h1>
         <p class="hero-text">
-          Track live status, stream details, uptime, recent sessions, and quick launch links for your watchlist.
+          Track more streamers, compare momentum, spot viewer milestones, study category patterns, and see who is really heating up.
         </p>
       </div>
       <div class="hero-actions">
-        <button id="refreshButton" class="button button-primary" type="button">Refresh now</button>
-        <button id="notifyButton" class="button button-secondary" type="button">Enable browser alerts</button>
+        <button id="refreshButton" class="button button-primary" type="button">Refresh live data</button>
+        <button id="notifyButton" class="button button-secondary" type="button">Enable smart alerts</button>
       </div>
     </header>
 
-    <section class="status-bar">
-      <div class="status-chip">
+    <section class="summary-grid">
+      <article class="summary-card">
         <span class="label">Tracked</span>
         <strong id="trackedCount">0</strong>
-      </div>
-      <div class="status-chip live">
-        <span class="label">Live now</span>
+        <p id="trackedMeta">watchlist size</p>
+      </article>
+      <article class="summary-card emphasis">
+        <span class="label">Live Now</span>
         <strong id="liveCount">0</strong>
-Lines 1-32
-
-
-Cancel
-Comment
-      </div>
-      <div class="status-chip">
-        <span class="label">Offline</span>
-        <strong id="offlineCount">0</strong>
-      </div>
-      <div class="status-chip wide">
-        <span class="label">Last updated</span>
+        <p id="liveMeta">active streams</p>
+      </article>
+      <article class="summary-card">
+        <span class="label">Current Viewers</span>
+        <strong id="viewerTotal">0</strong>
+        <p id="viewerMeta">across live channels</p>
+      </article>
+      <article class="summary-card">
+        <span class="label">Dominant Category</span>
+        <strong id="dominantCategory">Waiting...</strong>
+        <p id="dominantMeta">based on recent sessions</p>
+      </article>
+      <article class="summary-card">
+        <span class="label">Last Updated</span>
         <strong id="lastUpdated">Waiting for data</strong>
-      </div>
+        <p id="pollingText">auto refresh loading...</p>
+      </article>
     </section>
 
-    <section class="toolbar">
-      <label class="search-wrap" for="searchInput">
-        <span>Filter streamers</span>
-        <input id="searchInput" type="search" placeholder="Search by name or title">
+    <section class="control-bar">
+      <label class="field">
+        <span>Search</span>
+        <input id="searchInput" type="search" placeholder="Search names, titles, categories">
+      </label>
+      <label class="field">
+        <span>Group</span>
+        <select id="groupSelect">
+          <option value="all">All groups</option>
+        </select>
       </label>
       <label class="toggle">
         <input id="favoritesOnly" type="checkbox">
         <span>Favorites only</span>
       </label>
-      <p id="pollingText" class="polling-text">Auto refresh is loading...</p>
+      <label class="toggle">
+        <input id="liveOnly" type="checkbox">
+        <span>Live only</span>
+      </label>
+      <div class="compare-status">
+        <span class="label">Compare</span>
+        <strong id="compareCount">0 selected</strong>
+      </div>
     </section>
 
-    <section id="alertBox" class="alert hidden" aria-live="polite"></section>
+    <section id="alertBox" class="flash-message hidden" aria-live="polite"></section>
 
-    <main>
-      <section id="streamGrid" class="stream-grid" aria-live="polite"></section>
-      <section id="emptyState" class="empty-state hidden">
-        <h2>No streamers match that filter</h2>
-        <p>Try clearing the search or turn off favorites only.</p>
+    <main class="analytics-layout">
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Spotlights</h2>
+          <p>Instant read on leaders, consistency, and momentum.</p>
+        </div>
+        <div id="spotlightGrid" class="spotlight-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Watchlist Groups</h2>
+          <p>See which communities are active and where the viewers are piling up.</p>
+        </div>
+        <div id="groupSummary" class="group-grid"></div>
+      </section>
+
+      <section class="panel panel-wide">
+        <div class="panel-heading">
+          <h2>Leaderboards</h2>
+          <p>Live viewers, best historical peaks, most active channels, and trend momentum.</p>
+        </div>
+        <div id="leaderboards" class="leaderboard-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Category Mix</h2>
+          <p>What your watchlist spends time streaming.</p>
+        </div>
+        <div id="categoryMix" class="bars-list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Best Start Hours</h2>
+          <p>When your watchlist most often kicks off streams.</p>
+        </div>
+        <div id="hourlyChart" class="bars-list compact-bars"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Weekday Activity</h2>
+          <p>Which days are busiest across recent sessions.</p>
+        </div>
+        <div id="weekdayChart" class="bars-list compact-bars"></div>
+      </section>
+
+      <section class="panel panel-wide">
+        <div class="panel-heading">
+          <h2>Smart Alerts</h2>
+          <p>Go-live events, category shifts, milestones, and group surges.</p>
+        </div>
+        <div id="alertsFeed" class="alerts-feed"></div>
+      </section>
+
+      <section class="panel panel-wide">
+        <div class="panel-heading">
+          <h2>Compare Streamers</h2>
+          <p>Select up to four streamers and compare pace, peaks, and consistency.</p>
+        </div>
+        <div id="compareChips" class="chip-row"></div>
+        <div id="compareTableWrap" class="table-wrap"></div>
       </section>
     </main>
+
+    <section class="panel stream-panel">
+      <div class="panel-heading">
+        <h2>Streamer Intelligence Grid</h2>
+        <p>Profiles, recent sessions, mini viewer trends, and comparison controls.</p>
+      </div>
+      <div id="streamGrid" class="stream-grid" aria-live="polite"></div>
+      <section id="emptyState" class="empty-state hidden">
+        <h2>No streamers match this filter</h2>
+        <p>Clear a filter, switch groups, or turn off live-only mode.</p>
+      </section>
+    </section>
   </div>
 
   <template id="cardTemplate">
@@ -84,11 +172,18 @@ Comment
               <p class="login"></p>
             </div>
           </div>
-          <button class="favorite-button" type="button" aria-label="Toggle favorite">Star</button>
+          <div class="card-actions-inline">
+            <button class="tag-button favorite-button" type="button">Save</button>
+            <button class="tag-button compare-button" type="button">Compare</button>
+          </div>
         </div>
+        <div class="chip-row groups-row"></div>
         <p class="status-text"></p>
         <h3 class="stream-title"></h3>
         <p class="description"></p>
+        <div class="mini-chart">
+          <svg class="sparkline" viewBox="0 0 100 36" preserveAspectRatio="none" aria-hidden="true"></svg>
+        </div>
         <dl class="meta-grid">
           <div>
             <dt>Category</dt>
@@ -103,10 +198,32 @@ Comment
             <dd class="uptime"></dd>
           </div>
           <div>
-            <dt>Role</dt>
-            <dd class="broadcaster-type"></dd>
+            <dt>Sessions</dt>
+            <dd class="session-count"></dd>
+          </div>
+          <div>
+            <dt>Best Peak</dt>
+            <dd class="peak-count"></dd>
+          </div>
+          <div>
+            <dt>Avg Duration</dt>
+            <dd class="avg-duration"></dd>
           </div>
         </dl>
+        <div class="analytics-strip">
+          <div>
+            <span>Trend</span>
+            <strong class="trend-score"></strong>
+          </div>
+          <div>
+            <span>Consistency</span>
+            <strong class="consistency-score"></strong>
+          </div>
+          <div>
+            <span>Top Category</span>
+            <strong class="top-category"></strong>
+          </div>
+        </div>
         <div class="card-actions">
           <a class="button button-primary watch-link" target="_blank" rel="noreferrer">Watch on Twitch</a>
           <button class="button button-secondary history-toggle" type="button">Recent sessions</button>
@@ -121,3 +238,4 @@ Comment
   <script src="/kaiCenat.js" defer></script>
 </body>
 </html>
+
