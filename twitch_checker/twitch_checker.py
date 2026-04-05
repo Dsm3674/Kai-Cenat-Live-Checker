@@ -6,14 +6,14 @@ import os
 import secrets
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import requests
 from dotenv import load_dotenv
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -24,6 +24,27 @@ STATE_PATH = DATA_DIR / "stream_state.json"
 DEFAULT_TIMEOUT = 12
 TWITCH_OAUTH_URL = "https://id.twitch.tv/oauth2/token"
 TWITCH_API_BASE = "https://api.twitch.tv/helix"
+DEFAULT_ALERT_THRESHOLDS = [1000, 5000, 10000, 25000, 50000, 100000]
+DEFAULT_STREAMERS = [
+    "kaicenat",
+    "pokimane",
+    "caseoh_",
+    "fanum",
+    "tarik",
+    "hasanabi",
+    "shroud",
+    "xqc",
+    "mizkif",
+    "nmplol",
+    "asmongold",
+    "lirik",
+]
+DEFAULT_GROUPS = {
+    "AMP": ["kaicenat", "fanum"],
+    "Creators": ["pokimane", "hasanabi", "mizkif", "nmplol"],
+    "FPS": ["tarik", "shroud", "xqc"],
+    "Variety": ["caseoh_", "asmongold", "lirik"],
+}
 
 
 def utc_now() -> datetime:
@@ -50,13 +71,25 @@ def format_uptime(started_at: str | None) -> str:
 
     elapsed = utc_now() - started
     minutes = max(int(elapsed.total_seconds() // 60), 0)
-    hours, mins = divmod(minutes, 60)
+    return format_minutes(minutes)
+
+
+def format_minutes(minutes: int) -> str:
+    hours, mins = divmod(max(minutes, 0), 60)
     if hours >= 24:
         days, rem_hours = divmod(hours, 24)
         return f"{days}d {rem_hours}h {mins}m"
     if hours:
         return f"{hours}h {mins}m"
     return f"{mins}m"
+
+
+def duration_minutes(started_at: str | None, ended_at: str | None = None) -> int:
+    start = parse_timestamp(started_at)
+    end = parse_timestamp(ended_at) if ended_at else utc_now()
+    if not start or not end:
+        return 0
+    return max(int((end - start).total_seconds() // 60), 0)
 
 
 def flatten_thumbnail(url: str | None, width: int = 640, height: int = 360) -> str:
@@ -99,7 +132,7 @@ def parse_int(value: Any, default: int) -> int:
 
 def parse_streamers(raw: str | list[str] | None) -> list[str]:
     if raw is None:
-        return ["kaicenat"]
+        return DEFAULT_STREAMERS.copy()
     if isinstance(raw, list):
         items = raw
     else:
@@ -111,7 +144,45 @@ def parse_streamers(raw: str | list[str] | None) -> list[str]:
         if login and login not in seen:
             seen.add(login)
             normalized.append(login)
-    return normalized or ["kaicenat"]
+    return normalized or DEFAULT_STREAMERS.copy()
+
+
+def parse_int_list(raw: str | list[int] | list[str] | None, default: list[int]) -> list[int]:
+    if raw is None:
+        return default.copy()
+    items = raw if isinstance(raw, list) else [part.strip() for part in str(raw).split(",")]
+    values = sorted({parse_int(item, 0) for item in items if parse_int(item, 0) > 0})
+    return values or default.copy()
+
+
+def normalize_groups(raw_groups: dict[str, Any] | None, streamers: list[str]) -> dict[str, list[str]]:
+    valid = set(streamers)
+    groups = raw_groups or DEFAULT_GROUPS
+    normalized: dict[str, list[str]] = {}
+    for group_name, members in groups.items():
+        group_members = parse_streamers(members)
+        filtered = [member for member in group_members if member in valid]
+        if filtered:
+            normalized[group_name] = filtered
+    if not normalized:
+        normalized["Featured"] = streamers[: min(len(streamers), 6)]
+    return normalized
+
+
+def safe_average(values: list[int]) -> int:
+    if not values:
+        return 0
+    return round(sum(values) / len(values))
+
+
+def compact_text(value: str, limit: int = 120) -> str:
+    if len(value) <= limit:
+        return value
+    return value[: limit - 1].rstrip() + "…"
+
+
+def sort_take(items: list[dict[str, Any]], key: str, limit: int = 5) -> list[dict[str, Any]]:
+    return sorted(items, key=lambda item: item.get(key, 0), reverse=True)[:limit]
 
 
 @dataclass
@@ -119,10 +190,14 @@ class AppConfig:
     client_id: str
     client_secret: str
     streamers: list[str]
+    streamer_groups: dict[str, list[str]]
     check_interval: int
     discord_webhook: str
     enable_discord_notifications: bool
     history_limit: int
+    snapshot_limit: int
+    event_limit: int
+    alert_thresholds: list[int]
     frontend_title: str
     flask_secret_key: str
 
@@ -146,52 +221,33 @@ def load_config() -> AppConfig:
             encoding="utf-8",
         )
 
-    client_id = os.getenv("TWITCH_CLIENT_ID", file_config.get("client_id", "")).strip()
-    client_secret = os.getenv("TWITCH_CLIENT_SECRET", file_config.get("client_secret", "")).strip()
     streamers = parse_streamers(os.getenv("TWITCH_STREAMERS", file_config.get("streamers")))
-    check_interval = parse_int(os.getenv("CHECK_INTERVAL", file_config.get("check_interval", 60)), 60)
-    discord_webhook = os.getenv("DISCORD_WEBHOOK", file_config.get("discord_webhook", "")).strip()
-    enable_discord = str(
-        os.getenv(
-            "ENABLE_DISCORD_NOTIFICATIONS",
-            file_config.get("enable_discord_notifications", False),
-        )
-    ).lower() in {"1", "true", "yes", "on"}
-    history_limit = parse_int(os.getenv("HISTORY_LIMIT", file_config.get("history_limit", 8)), 8)
-    frontend_title = os.getenv("FRONTEND_TITLE", file_config.get("frontend_title", "Twitch Live Radar")).strip()
-    flask_secret = os.getenv("FLASK_SECRET_KEY", secrets.token_urlsafe(32))
+    streamer_groups = normalize_groups(file_config.get("streamer_groups"), streamers)
 
     return AppConfig(
-        client_id=client_id,
-        client_secret=client_secret,
+        client_id=os.getenv("TWITCH_CLIENT_ID", file_config.get("client_id", "")).strip(),
+        client_secret=os.getenv("TWITCH_CLIENT_SECRET", file_config.get("client_secret", "")).strip(),
         streamers=streamers,
-        check_interval=max(check_interval, 15),
-        discord_webhook=discord_webhook,
-        enable_discord_notifications=enable_discord,
-        history_limit=max(history_limit, 1),
-        frontend_title=frontend_title or "Twitch Live Radar",
-        flask_secret_key=flask_secret,
+        streamer_groups=streamer_groups,
+        check_interval=max(parse_int(os.getenv("CHECK_INTERVAL", file_config.get("check_interval", 60)), 60), 15),
+        discord_webhook=os.getenv("DISCORD_WEBHOOK", file_config.get("discord_webhook", "")).strip(),
+        enable_discord_notifications=str(
+            os.getenv(
+                "ENABLE_DISCORD_NOTIFICATIONS",
+                file_config.get("enable_discord_notifications", False),
+            )
+        ).lower() in {"1", "true", "yes", "on"},
+        history_limit=max(parse_int(os.getenv("HISTORY_LIMIT", file_config.get("history_limit", 12)), 12), 1),
+        snapshot_limit=max(parse_int(os.getenv("SNAPSHOT_LIMIT", file_config.get("snapshot_limit", 72)), 72), 12),
+        event_limit=max(parse_int(os.getenv("EVENT_LIMIT", file_config.get("event_limit", 30)), 30), 5),
+        alert_thresholds=parse_int_list(
+            os.getenv("ALERT_THRESHOLDS", file_config.get("alert_thresholds")),
+            DEFAULT_ALERT_THRESHOLDS,
+        ),
+        frontend_title=os.getenv("FRONTEND_TITLE", file_config.get("frontend_title", "Twitch Live Radar")).strip()
+        or "Twitch Live Radar",
+        flask_secret_key=os.getenv("FLASK_SECRET_KEY", secrets.token_urlsafe(32)),
     )
-
-
-@dataclass
-class StreamRecord:
-    login: str
-    display_name: str
-    is_live: bool
-    title: str
-    game_name: str
-    viewer_count: int
-    started_at: str | None
-    uptime: str
-    profile_image_url: str
-    offline_image_url: str
-    thumbnail_url: str
-    url: str
-    description: str
-    broadcaster_type: str
-    last_seen_at: str
-    recent_sessions: list[dict[str, Any]]
 
 
 class StreamStateStore:
@@ -202,58 +258,259 @@ class StreamStateStore:
         self.state = self._load_state()
 
     def _default_state(self) -> dict[str, Any]:
-        return {"streams": {}, "history": {}}
+        return {"streams": {}, "history": {}, "snapshots": {}, "events": []}
 
     def _load_state(self) -> dict[str, Any]:
         data = load_json_file(self.path)
-        if "streams" not in data or "history" not in data:
+        if not all(key in data for key in ("streams", "history", "snapshots", "events")):
             return self._default_state()
         return data
 
     def _save(self) -> None:
         self.path.write_text(json.dumps(self.state, indent=2), encoding="utf-8")
 
+    def _trim_tail(self, items: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+        if len(items) <= limit:
+            return items
+        return items[-limit:]
+
     def recent_sessions(self, login: str, limit: int) -> list[dict[str, Any]]:
         history = self.state.get("history", {}).get(login, [])
         return list(reversed(history[-limit:]))
 
-    def update(self, login: str, is_live: bool, started_at: str | None, title: str) -> str | None:
+    def recent_snapshots(self, login: str, limit: int) -> list[dict[str, Any]]:
+        snapshots = self.state.get("snapshots", {}).get(login, [])
+        return snapshots[-limit:]
+
+    def recent_events(self, limit: int) -> list[dict[str, Any]]:
+        return list(reversed(self.state.get("events", [])[-limit:]))
+
+    def analytics_for_login(self, login: str, current_card: dict[str, Any]) -> dict[str, Any]:
+        history = self.state.get("history", {}).get(login, [])
+        snapshots = self.state.get("snapshots", {}).get(login, [])
+        current_state = self.state.get("streams", {}).get(login, {})
+
+        session_count = len(history) + (1 if current_card.get("is_live") else 0)
+        completed_minutes = sum(session.get("duration_minutes", 0) for session in history)
+        live_minutes = duration_minutes(current_state.get("session_started_at")) if current_card.get("is_live") else 0
+        total_minutes = completed_minutes + live_minutes
+
+        peak_values = [session.get("peak_viewers", 0) for session in history]
+        if current_card.get("is_live"):
+            peak_values.append(current_state.get("peak_viewers", current_card.get("viewer_count", 0)))
+
+        category_counts: dict[str, int] = {}
+        hourly_activity = [0] * 24
+        weekday_activity = [0] * 7
+
+        for session in history:
+            category = session.get("game_name") or "Uncategorized"
+            category_counts[category] = category_counts.get(category, 0) + 1
+            started = parse_timestamp(session.get("started_at"))
+            if started:
+                hourly_activity[started.hour] += 1
+                weekday_activity[started.weekday()] += 1
+
+        if current_card.get("is_live"):
+            category = current_card.get("game_name") or "Uncategorized"
+            category_counts[category] = category_counts.get(category, 0) + 1
+            started = parse_timestamp(current_card.get("started_at"))
+            if started:
+                hourly_activity[started.hour] += 1
+                weekday_activity[started.weekday()] += 1
+
+        top_category = max(category_counts.items(), key=lambda item: item[1])[0] if category_counts else "Uncategorized"
+        recent_viewers = [point.get("viewers", 0) for point in snapshots[-12:]]
+        recent_average = safe_average(recent_viewers[-5:])
+        avg_peak = safe_average(peak_values)
+        consistency_score = min(100, (session_count * 7) + (sum(1 for value in weekday_activity if value) * 6))
+        baseline = max(avg_peak, 1)
+        trend_score = round((current_card.get("viewer_count", recent_average) / baseline) * 100) if session_count else 0
+
+        return {
+            "session_count": session_count,
+            "total_minutes": total_minutes,
+            "avg_duration_minutes": round(total_minutes / session_count) if session_count else 0,
+            "avg_peak_viewers": avg_peak,
+            "best_peak_viewers": max(peak_values, default=0),
+            "top_category": top_category,
+            "consistency_score": consistency_score,
+            "trend_score": trend_score,
+            "recent_average_viewers": recent_average,
+            "hourly_activity": hourly_activity,
+            "weekday_activity": weekday_activity,
+            "category_breakdown": [
+                {"name": name, "value": value}
+                for name, value in sorted(category_counts.items(), key=lambda item: item[1], reverse=True)
+            ][:6],
+            "recent_viewers": snapshots[-12:],
+            "current_peak_viewers": current_state.get("peak_viewers", current_card.get("viewer_count", 0)),
+        }
+
+    def update(
+        self,
+        *,
+        login: str,
+        display_name: str,
+        is_live: bool,
+        started_at: str | None,
+        title: str,
+        game_name: str,
+        viewer_count: int,
+        thresholds: list[int],
+        history_limit: int,
+        snapshot_limit: int,
+        event_limit: int,
+    ) -> list[dict[str, Any]]:
         with self.lock:
-            stream_state = self.state.setdefault("streams", {})
-            history_state = self.state.setdefault("history", {})
-            previous = stream_state.get(login, {"is_live": False})
+            streams = self.state.setdefault("streams", {})
+            history = self.state.setdefault("history", {})
+            snapshots = self.state.setdefault("snapshots", {})
+            events = self.state.setdefault("events", [])
+
+            previous = streams.get(login, {"is_live": False})
             now_iso = utc_now_iso()
-            event: str | None = None
+            generated_events: list[dict[str, Any]] = []
 
             if is_live:
                 session_started_at = started_at or previous.get("session_started_at") or now_iso
-                stream_state[login] = {
+                prev_peak = parse_int(previous.get("peak_viewers", 0), 0)
+                peak_viewers = max(prev_peak, viewer_count)
+                viewer_sum = parse_int(previous.get("viewer_sum", 0), 0) + viewer_count
+                snapshot_count = parse_int(previous.get("snapshot_count", 0), 0) + 1
+
+                if not previous.get("is_live"):
+                    generated_events.append(
+                        self._build_event(
+                            login=login,
+                            display_name=display_name,
+                            event_type="went_live",
+                            message=f"{display_name} just went live in {game_name or 'a new category'}.",
+                            severity="high",
+                        )
+                    )
+                elif previous.get("game_name") and game_name and previous.get("game_name") != game_name:
+                    generated_events.append(
+                        self._build_event(
+                            login=login,
+                            display_name=display_name,
+                            event_type="category_changed",
+                            message=f"{display_name} switched categories to {game_name}.",
+                            severity="medium",
+                            extra={"from": previous.get("game_name"), "to": game_name},
+                        )
+                    )
+
+                crossed = self._crossed_threshold(prev_peak, peak_viewers, thresholds)
+                if crossed:
+                    generated_events.append(
+                        self._build_event(
+                            login=login,
+                            display_name=display_name,
+                            event_type="viewer_milestone",
+                            message=f"{display_name} passed {crossed:,} viewers.",
+                            severity="medium",
+                            extra={"threshold": crossed},
+                        )
+                    )
+
+                snapshots.setdefault(login, []).append(
+                    {
+                        "timestamp": now_iso,
+                        "viewers": viewer_count,
+                        "game_name": game_name,
+                        "title": compact_text(title, 90),
+                    }
+                )
+                snapshots[login] = self._trim_tail(snapshots[login], snapshot_limit)
+
+                streams[login] = {
                     "is_live": True,
                     "session_started_at": session_started_at,
                     "last_seen_at": now_iso,
                     "title": title,
+                    "game_name": game_name,
+                    "peak_viewers": peak_viewers,
+                    "viewer_sum": viewer_sum,
+                    "snapshot_count": snapshot_count,
+                    "last_viewer_count": viewer_count,
+                    "display_name": display_name,
                 }
-                if not previous.get("is_live"):
-                    event = "went_live"
             else:
                 if previous.get("is_live"):
-                    history_state.setdefault(login, []).append(
+                    ended_at = now_iso
+                    session_duration = duration_minutes(previous.get("session_started_at"), ended_at)
+                    history.setdefault(login, []).append(
                         {
                             "started_at": previous.get("session_started_at"),
-                            "ended_at": now_iso,
+                            "ended_at": ended_at,
                             "title": previous.get("title", ""),
+                            "game_name": previous.get("game_name", ""),
+                            "avg_viewers": round(
+                                parse_int(previous.get("viewer_sum", 0), 0)
+                                / max(parse_int(previous.get("snapshot_count", 1), 1), 1)
+                            ),
+                            "peak_viewers": parse_int(previous.get("peak_viewers", 0), 0),
+                            "duration_minutes": session_duration,
                         }
                     )
-                    event = "went_offline"
-                stream_state[login] = {
+                    history[login] = self._trim_tail(history[login], max(history_limit * 8, history_limit))
+                    generated_events.append(
+                        self._build_event(
+                            login=login,
+                            display_name=display_name,
+                            event_type="went_offline",
+                            message=f"{display_name} ended stream after {format_minutes(session_duration)}.",
+                            severity="low",
+                            extra={"duration_minutes": session_duration},
+                        )
+                    )
+
+                streams[login] = {
                     "is_live": False,
                     "session_started_at": None,
                     "last_seen_at": now_iso,
                     "title": title,
+                    "game_name": game_name,
+                    "peak_viewers": 0,
+                    "viewer_sum": 0,
+                    "snapshot_count": 0,
+                    "last_viewer_count": 0,
+                    "display_name": display_name,
                 }
 
+            events.extend(generated_events)
+            self.state["events"] = self._trim_tail(events, event_limit)
             self._save()
-            return event
+            return generated_events
+
+    def _crossed_threshold(self, previous_peak: int, current_peak: int, thresholds: list[int]) -> int | None:
+        crossed = [threshold for threshold in thresholds if previous_peak < threshold <= current_peak]
+        return max(crossed, default=None)
+
+    def _build_event(
+        self,
+        *,
+        login: str,
+        display_name: str,
+        event_type: str,
+        message: str,
+        severity: str,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        timestamp = utc_now_iso()
+        payload = {
+            "id": f"{event_type}:{login}:{timestamp}",
+            "type": event_type,
+            "login": login,
+            "display_name": display_name,
+            "message": message,
+            "severity": severity,
+            "created_at": timestamp,
+        }
+        if extra:
+            payload.update(extra)
+        return payload
 
 
 class TwitchService:
@@ -329,42 +586,64 @@ class TwitchService:
         streams = self._fetch_streams(requested_logins)
 
         cards: list[dict[str, Any]] = []
-        live_count = 0
+        analytics_map: dict[str, dict[str, Any]] = {}
+
         for login in requested_logins:
             user = users.get(login, {})
             stream = streams.get(login, {})
+            display_name = user.get("display_name", login)
             is_live = bool(stream)
-            event = self.state_store.update(
+            viewer_count = parse_int(stream.get("viewer_count", 0), 0)
+            game_name = stream.get("game_name", "")
+            title = stream.get("title", "")
+
+            generated_events = self.state_store.update(
                 login=login,
+                display_name=display_name,
                 is_live=is_live,
                 started_at=stream.get("started_at"),
-                title=stream.get("title", ""),
+                title=title,
+                game_name=game_name,
+                viewer_count=viewer_count,
+                thresholds=self.config.alert_thresholds,
+                history_limit=self.config.history_limit,
+                snapshot_limit=self.config.snapshot_limit,
+                event_limit=self.config.event_limit,
             )
 
-            if event == "went_live":
-                self._send_discord_notification(login, user, stream)
+            if any(event["type"] == "went_live" for event in generated_events):
+                self._send_discord_notification(login, display_name, user, stream)
 
-            record = StreamRecord(
-                login=login,
-                display_name=user.get("display_name", login),
-                is_live=is_live,
-                title=stream.get("title", ""),
-                game_name=stream.get("game_name", ""),
-                viewer_count=stream.get("viewer_count", 0),
-                started_at=stream.get("started_at"),
-                uptime=format_uptime(stream.get("started_at")),
-                profile_image_url=user.get("profile_image_url", ""),
-                offline_image_url=user.get("offline_image_url", ""),
-                thumbnail_url=flatten_thumbnail(stream.get("thumbnail_url")),
-                url=f"https://www.twitch.tv/{login}",
-                description=user.get("description", ""),
-                broadcaster_type=user.get("broadcaster_type", ""),
-                last_seen_at=utc_now_iso(),
-                recent_sessions=self.state_store.recent_sessions(login, self.config.history_limit),
-            )
-            cards.append(asdict(record))
-            if is_live:
-                live_count += 1
+            card = {
+                "login": login,
+                "display_name": display_name,
+                "is_live": is_live,
+                "title": title,
+                "game_name": game_name,
+                "viewer_count": viewer_count,
+                "started_at": stream.get("started_at"),
+                "uptime": format_uptime(stream.get("started_at")),
+                "profile_image_url": user.get("profile_image_url", ""),
+                "offline_image_url": user.get("offline_image_url", ""),
+                "thumbnail_url": flatten_thumbnail(stream.get("thumbnail_url")),
+                "url": f"https://www.twitch.tv/{login}",
+                "description": user.get("description", ""),
+                "broadcaster_type": user.get("broadcaster_type", "") or "standard",
+                "last_seen_at": utc_now_iso(),
+                "groups": [group for group, members in self.config.streamer_groups.items() if login in members],
+                "recent_sessions": self.state_store.recent_sessions(login, self.config.history_limit),
+                "recent_snapshots": self.state_store.recent_snapshots(login, 12),
+            }
+            analytics = self.state_store.analytics_for_login(login, card)
+            card["analytics"] = analytics
+            cards.append(card)
+            analytics_map[login] = analytics
+
+        overview = self._build_overview(cards, analytics_map)
+        leaderboards = self._build_leaderboards(cards, analytics_map)
+        group_summary = self._build_group_summary(cards)
+        category_mix = self._build_category_mix(cards, analytics_map)
+        compare_defaults = requested_logins[: min(4, len(requested_logins))]
 
         return {
             "generated_at": utc_now_iso(),
@@ -373,13 +652,53 @@ class TwitchService:
             "streamers": cards,
             "summary": {
                 "tracked": len(cards),
-                "live": live_count,
-                "offline": max(len(cards) - live_count, 0),
+                "live": sum(1 for card in cards if card["is_live"]),
+                "offline": sum(1 for card in cards if not card["is_live"]),
+                "current_viewers": sum(card["viewer_count"] for card in cards if card["is_live"]),
             },
+            "overview": overview,
+            "leaderboards": leaderboards,
+            "group_summary": group_summary,
+            "category_mix": category_mix,
+            "alerts": self.state_store.recent_events(self.config.event_limit),
+            "compare_defaults": compare_defaults,
         }
 
     def get_stream(self, login: str) -> dict[str, Any]:
-        return self.get_dashboard([login])["streamers"][0]
+        dashboard = self.get_dashboard([login])
+        return dashboard["streamers"][0]
+
+    def get_analytics_stream(self, login: str) -> dict[str, Any]:
+        stream = self.get_stream(login)
+        return {
+            "login": stream["login"],
+            "display_name": stream["display_name"],
+            "analytics": stream["analytics"],
+            "recent_sessions": stream["recent_sessions"],
+            "recent_snapshots": stream["recent_snapshots"],
+        }
+
+    def compare_streamers(self, logins: list[str]) -> dict[str, Any]:
+        dashboard = self.get_dashboard(logins)
+        compared = []
+        for card in dashboard["streamers"]:
+            analytics = card["analytics"]
+            compared.append(
+                {
+                    "login": card["login"],
+                    "display_name": card["display_name"],
+                    "is_live": card["is_live"],
+                    "viewer_count": card["viewer_count"],
+                    "session_count": analytics["session_count"],
+                    "avg_duration_minutes": analytics["avg_duration_minutes"],
+                    "best_peak_viewers": analytics["best_peak_viewers"],
+                    "avg_peak_viewers": analytics["avg_peak_viewers"],
+                    "trend_score": analytics["trend_score"],
+                    "top_category": analytics["top_category"],
+                    "consistency_score": analytics["consistency_score"],
+                }
+            )
+        return {"generated_at": dashboard["generated_at"], "streamers": compared}
 
     def _fetch_users(self, logins: list[str]) -> dict[str, dict[str, Any]]:
         payload = self._request("users", [("login", login) for login in logins])
@@ -389,9 +708,157 @@ class TwitchService:
         payload = self._request("streams", [("user_login", login) for login in logins])
         return {item["user_login"].lower(): item for item in payload.get("data", [])}
 
+    def _build_overview(
+        self,
+        cards: list[dict[str, Any]],
+        analytics_map: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        live_cards = [card for card in cards if card["is_live"]]
+        top_live = max(live_cards, key=lambda card: card["viewer_count"], default=None)
+        most_consistent = max(
+            cards,
+            key=lambda card: analytics_map[card["login"]]["consistency_score"],
+            default=None,
+        )
+        biggest_peak = max(
+            cards,
+            key=lambda card: analytics_map[card["login"]]["best_peak_viewers"],
+            default=None,
+        )
+
+        hourly_activity = [0] * 24
+        weekday_activity = [0] * 7
+        for analytics in analytics_map.values():
+            hourly_activity = [left + right for left, right in zip(hourly_activity, analytics["hourly_activity"])]
+            weekday_activity = [left + right for left, right in zip(weekday_activity, analytics["weekday_activity"])]
+
+        dominant_category = max(
+            self._build_category_mix(cards, analytics_map),
+            key=lambda item: item["value"],
+            default={"name": "Uncategorized", "value": 0},
+        )
+
+        return {
+            "tracked": len(cards),
+            "live": len(live_cards),
+            "offline": max(len(cards) - len(live_cards), 0),
+            "current_viewers": sum(card["viewer_count"] for card in live_cards),
+            "avg_live_viewers": round(sum(card["viewer_count"] for card in live_cards) / len(live_cards)) if live_cards else 0,
+            "dominant_category": dominant_category["name"],
+            "hottest_stream": {
+                "display_name": top_live["display_name"],
+                "viewer_count": top_live["viewer_count"],
+                "login": top_live["login"],
+            } if top_live else None,
+            "most_consistent": {
+                "display_name": most_consistent["display_name"],
+                "score": analytics_map[most_consistent["login"]]["consistency_score"],
+                "login": most_consistent["login"],
+            } if most_consistent else None,
+            "biggest_peak": {
+                "display_name": biggest_peak["display_name"],
+                "peak_viewers": analytics_map[biggest_peak["login"]]["best_peak_viewers"],
+                "login": biggest_peak["login"],
+            } if biggest_peak else None,
+            "hourly_activity": hourly_activity,
+            "weekday_activity": weekday_activity,
+        }
+
+    def _build_leaderboards(
+        self,
+        cards: list[dict[str, Any]],
+        analytics_map: dict[str, dict[str, Any]],
+    ) -> dict[str, list[dict[str, Any]]]:
+        live_now = sort_take(
+            [
+                {
+                    "display_name": card["display_name"],
+                    "login": card["login"],
+                    "value": card["viewer_count"],
+                    "meta": card["game_name"] or "Offline",
+                }
+                for card in cards
+                if card["is_live"]
+            ],
+            "value",
+        )
+        best_peak = sort_take(
+            [
+                {
+                    "display_name": card["display_name"],
+                    "login": card["login"],
+                    "value": analytics_map[card["login"]]["best_peak_viewers"],
+                    "meta": analytics_map[card["login"]]["top_category"],
+                }
+                for card in cards
+            ],
+            "value",
+        )
+        most_active = sort_take(
+            [
+                {
+                    "display_name": card["display_name"],
+                    "login": card["login"],
+                    "value": analytics_map[card["login"]]["session_count"],
+                    "meta": f"{analytics_map[card['login']]['avg_duration_minutes']}m avg",
+                }
+                for card in cards
+            ],
+            "value",
+        )
+        trend = sort_take(
+            [
+                {
+                    "display_name": card["display_name"],
+                    "login": card["login"],
+                    "value": analytics_map[card["login"]]["trend_score"],
+                    "meta": analytics_map[card["login"]]["top_category"],
+                }
+                for card in cards
+            ],
+            "value",
+        )
+        return {
+            "live_now": live_now,
+            "best_peak": best_peak,
+            "most_active": most_active,
+            "trend": trend,
+        }
+
+    def _build_group_summary(self, cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        summary: list[dict[str, Any]] = []
+        for group_name, members in self.config.streamer_groups.items():
+            group_cards = [card for card in cards if card["login"] in members]
+            if not group_cards:
+                continue
+            summary.append(
+                {
+                    "name": group_name,
+                    "tracked": len(group_cards),
+                    "live": sum(1 for card in group_cards if card["is_live"]),
+                    "current_viewers": sum(card["viewer_count"] for card in group_cards if card["is_live"]),
+                }
+            )
+        return summary
+
+    def _build_category_mix(
+        self,
+        cards: list[dict[str, Any]],
+        analytics_map: dict[str, dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        category_totals: dict[str, int] = {}
+        for card in cards:
+            for item in analytics_map[card["login"]]["category_breakdown"]:
+                category_totals[item["name"]] = category_totals.get(item["name"], 0) + item["value"]
+        return [
+            {"name": name, "value": value}
+            for name, value in sorted(category_totals.items(), key=lambda item: item[1], reverse=True)
+        ][:8]
+
     def _send_discord_notification(
         self,
         login: str,
+        display_name: str,
         user: dict[str, Any],
         stream: dict[str, Any],
     ) -> None:
@@ -401,7 +868,7 @@ class TwitchService:
         content = {
             "embeds": [
                 {
-                    "title": f"{user.get('display_name', login)} just went live",
+                    "title": f"{display_name} just went live",
                     "description": stream.get("title", "Live on Twitch"),
                     "url": f"https://www.twitch.tv/{login}",
                     "color": 15105570,
@@ -467,8 +934,9 @@ def create_app() -> Flask:
 
     @app.get("/api/dashboard")
     def dashboard() -> Any:
+        logins = parse_streamers(request.args.get("logins")) if request.args.get("logins") else None
         try:
-            return jsonify(service.get_dashboard())
+            return jsonify(service.get_dashboard(logins))
         except requests.RequestException as exc:
             app.logger.exception("Twitch request failed")
             return jsonify({"error": "twitch_request_failed", "detail": str(exc)}), 502
@@ -495,6 +963,10 @@ def create_app() -> Flask:
                     normalized,
                     config.history_limit,
                 ),
+                "recent_snapshots": service.state_store.recent_snapshots(
+                    normalized,
+                    config.snapshot_limit,
+                ),
             }
         )
 
@@ -505,9 +977,68 @@ def create_app() -> Flask:
                 "title": config.frontend_title,
                 "check_interval": config.check_interval,
                 "streamers": config.streamers,
+                "streamer_groups": config.streamer_groups,
                 "history_limit": config.history_limit,
+                "snapshot_limit": config.snapshot_limit,
+                "alert_thresholds": config.alert_thresholds,
             }
         )
+
+    @app.get("/api/analytics/overview")
+    def analytics_overview() -> Any:
+        try:
+            dashboard = service.get_dashboard()
+            return jsonify(
+                {
+                    "generated_at": dashboard["generated_at"],
+                    "overview": dashboard["overview"],
+                    "group_summary": dashboard["group_summary"],
+                    "category_mix": dashboard["category_mix"],
+                }
+            )
+        except requests.RequestException as exc:
+            app.logger.exception("Twitch request failed")
+            return jsonify({"error": "twitch_request_failed", "detail": str(exc)}), 502
+        except RuntimeError as exc:
+            return jsonify({"error": "configuration_error", "detail": str(exc)}), 503
+
+    @app.get("/api/analytics/leaderboards")
+    def analytics_leaderboards() -> Any:
+        try:
+            dashboard = service.get_dashboard()
+            return jsonify(
+                {
+                    "generated_at": dashboard["generated_at"],
+                    "leaderboards": dashboard["leaderboards"],
+                }
+            )
+        except requests.RequestException as exc:
+            app.logger.exception("Twitch request failed")
+            return jsonify({"error": "twitch_request_failed", "detail": str(exc)}), 502
+        except RuntimeError as exc:
+            return jsonify({"error": "configuration_error", "detail": str(exc)}), 503
+
+    @app.get("/api/analytics/compare")
+    def analytics_compare() -> Any:
+        requested = request.args.get("logins")
+        logins = parse_streamers(requested) if requested else config.streamers[:4]
+        try:
+            return jsonify(service.compare_streamers(logins))
+        except requests.RequestException as exc:
+            app.logger.exception("Twitch request failed")
+            return jsonify({"error": "twitch_request_failed", "detail": str(exc)}), 502
+        except RuntimeError as exc:
+            return jsonify({"error": "configuration_error", "detail": str(exc)}), 503
+
+    @app.get("/api/analytics/stream/<login>")
+    def analytics_stream(login: str) -> Any:
+        try:
+            return jsonify(service.get_analytics_stream(login.lower()))
+        except requests.RequestException as exc:
+            app.logger.exception("Twitch request failed")
+            return jsonify({"error": "twitch_request_failed", "detail": str(exc)}), 502
+        except RuntimeError as exc:
+            return jsonify({"error": "configuration_error", "detail": str(exc)}), 503
 
     return app
 
