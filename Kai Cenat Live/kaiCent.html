@@ -1,56 +1,123 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Kai Cenat Live Checker</title>
-  <link rel="stylesheet" href="kaiCenat.css">
-  <style>
-    #liveBanner {
-      display: none;
-      padding: 20px;
-      background-color: red;
-      color: white;
-      font-size: 24px;
-      text-align: center;
-    }
-  </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Twitch Live Radar</title>
+  <link rel="stylesheet" href="/kaiCenat.css">
 </head>
 <body>
-  <h1>Lets see if Kai Cenat is live:</h1>
-  <br>
-  <p>If the screen is blank he isn't live otherwise he is</p>
-  
-  <div id="liveBanner">🔥 Kai Cenat is LIVE on Twitch! 🥭 🔥</div>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Real-time Twitch tracking</p>
+        <h1 id="appTitle">Twitch Live Radar</h1>
+        <p class="hero-text">
+          Track live status, stream details, uptime, recent sessions, and quick launch links for your watchlist.
+        </p>
+      </div>
+      <div class="hero-actions">
+        <button id="refreshButton" class="button button-primary" type="button">Refresh now</button>
+        <button id="notifyButton" class="button button-secondary" type="button">Enable browser alerts</button>
+      </div>
+    </header>
 
-  <script>
-    // ✅ FIXED: Now uses your backend API instead of direct Twitch API
-    const userLogin = 'kaicenat';
+    <section class="status-bar">
+      <div class="status-chip">
+        <span class="label">Tracked</span>
+        <strong id="trackedCount">0</strong>
+      </div>
+      <div class="status-chip live">
+        <span class="label">Live now</span>
+        <strong id="liveCount">0</strong>
+Lines 1-32
 
-    async function checkIfLive() {
-      try {
-        // Call your backend API (no credentials needed in frontend!)
-        const res = await fetch(`http://localhost:5050/api/live/${userLogin}`);
 
-        if (!res.ok) {
-          console.error('Backend API error:', res.status, res.statusText);
-          return;
-        }
+Cancel
+Comment
+      </div>
+      <div class="status-chip">
+        <span class="label">Offline</span>
+        <strong id="offlineCount">0</strong>
+      </div>
+      <div class="status-chip wide">
+        <span class="label">Last updated</span>
+        <strong id="lastUpdated">Waiting for data</strong>
+      </div>
+    </section>
 
-        const data = await res.json();
-        const isLive = data.live === true;
+    <section class="toolbar">
+      <label class="search-wrap" for="searchInput">
+        <span>Filter streamers</span>
+        <input id="searchInput" type="search" placeholder="Search by name or title">
+      </label>
+      <label class="toggle">
+        <input id="favoritesOnly" type="checkbox">
+        <span>Favorites only</span>
+      </label>
+      <p id="pollingText" class="polling-text">Auto refresh is loading...</p>
+    </section>
 
-        if (isLive) {
-          document.getElementById('liveBanner').style.display = 'block';
-        } else {
-          document.getElementById('liveBanner').style.display = 'none';
-        }
-      } catch (error) {
-        console.error('Fetch error:', error);
-      }
-    }
+    <section id="alertBox" class="alert hidden" aria-live="polite"></section>
 
-    // Check immediately and then every minute
-    checkIfLive();
-    setInterval(checkIfLive, 60000);
-  </script>
+    <main>
+      <section id="streamGrid" class="stream-grid" aria-live="polite"></section>
+      <section id="emptyState" class="empty-state hidden">
+        <h2>No streamers match that filter</h2>
+        <p>Try clearing the search or turn off favorites only.</p>
+      </section>
+    </main>
+  </div>
+
+  <template id="cardTemplate">
+    <article class="stream-card">
+      <div class="card-media">
+        <div class="live-badge">LIVE</div>
+        <img class="stream-image" alt="">
+      </div>
+      <div class="card-body">
+        <div class="card-topline">
+          <div class="identity">
+            <img class="avatar" alt="">
+            <div>
+              <h2 class="display-name"></h2>
+              <p class="login"></p>
+            </div>
+          </div>
+          <button class="favorite-button" type="button" aria-label="Toggle favorite">Star</button>
+        </div>
+        <p class="status-text"></p>
+        <h3 class="stream-title"></h3>
+        <p class="description"></p>
+        <dl class="meta-grid">
+          <div>
+            <dt>Category</dt>
+            <dd class="game-name"></dd>
+          </div>
+          <div>
+            <dt>Viewers</dt>
+            <dd class="viewer-count"></dd>
+          </div>
+          <div>
+            <dt>Uptime</dt>
+            <dd class="uptime"></dd>
+          </div>
+          <div>
+            <dt>Role</dt>
+            <dd class="broadcaster-type"></dd>
+          </div>
+        </dl>
+        <div class="card-actions">
+          <a class="button button-primary watch-link" target="_blank" rel="noreferrer">Watch on Twitch</a>
+          <button class="button button-secondary history-toggle" type="button">Recent sessions</button>
+        </div>
+        <div class="history-panel hidden">
+          <ul class="history-list"></ul>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <script src="/kaiCenat.js" defer></script>
 </body>
 </html>
