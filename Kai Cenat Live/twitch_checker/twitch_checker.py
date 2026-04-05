@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -30,11 +29,6 @@ TWITCH_API_BASE = "https://api.twitch.tv/helix"
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
-Lines 1-31
-
-
-Cancel
-Comment
 
 def utc_now_iso() -> str:
     return utc_now().isoformat()
@@ -80,6 +74,29 @@ def load_json_file(path: Path) -> dict[str, Any]:
         return {}
 
 
+def load_dotenv_candidates() -> None:
+    candidates = [
+        BASE_DIR / ".env",
+        BASE_DIR.parent / ".env",
+        Path.cwd() / ".env",
+    ]
+    seen: set[Path] = set()
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if candidate.exists():
+            load_dotenv(candidate, override=False)
+
+
+def parse_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def parse_streamers(raw: str | list[str] | None) -> list[str]:
     if raw is None:
         return ["kaicenat"]
@@ -120,7 +137,7 @@ class AppConfig:
 
 
 def load_config() -> AppConfig:
-    load_dotenv(BASE_DIR / ".env")
+    load_dotenv_candidates()
 
     file_config = load_json_file(CONFIG_PATH)
     if not CONFIG_PATH.exists() and SAMPLE_CONFIG_PATH.exists():
@@ -132,7 +149,7 @@ def load_config() -> AppConfig:
     client_id = os.getenv("TWITCH_CLIENT_ID", file_config.get("client_id", "")).strip()
     client_secret = os.getenv("TWITCH_CLIENT_SECRET", file_config.get("client_secret", "")).strip()
     streamers = parse_streamers(os.getenv("TWITCH_STREAMERS", file_config.get("streamers")))
-    check_interval = int(os.getenv("CHECK_INTERVAL", file_config.get("check_interval", 60)))
+    check_interval = parse_int(os.getenv("CHECK_INTERVAL", file_config.get("check_interval", 60)), 60)
     discord_webhook = os.getenv("DISCORD_WEBHOOK", file_config.get("discord_webhook", "")).strip()
     enable_discord = str(
         os.getenv(
@@ -140,7 +157,7 @@ def load_config() -> AppConfig:
             file_config.get("enable_discord_notifications", False),
         )
     ).lower() in {"1", "true", "yes", "on"}
-    history_limit = int(os.getenv("HISTORY_LIMIT", file_config.get("history_limit", 8)))
+    history_limit = parse_int(os.getenv("HISTORY_LIMIT", file_config.get("history_limit", 8)), 8)
     frontend_title = os.getenv("FRONTEND_TITLE", file_config.get("frontend_title", "Twitch Live Radar")).strip()
     flask_secret = os.getenv("FLASK_SECRET_KEY", secrets.token_urlsafe(32))
 
