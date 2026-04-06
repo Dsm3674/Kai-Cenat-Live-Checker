@@ -71,7 +71,11 @@
         <header class="topbar">
             <div class="topbar-left">
                 <div class="live-pulse-dot" id="globalPulseDot" title="System status"></div>
-                <span class="topbar-title" id="topbarTitle">Loading...</span>
+                <div class="search-container">
+                    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" id="streamerSearch" placeholder="Search any streamer..." autocomplete="off">
+                    <div class="search-results" id="searchResults"></div>
+                </div>
             </div>
             <div class="topbar-right">
                 <div class="stat-chip" id="chipLive" title="Streamers currently live">
@@ -202,7 +206,13 @@
                         <div class="profile-live-ring" id="profileLiveRing"></div>
                     </div>
                     <div class="profile-info">
-                        <div class="profile-name" id="profileName">Select a streamer</div>
+                        <div class="profile-name-row">
+                            <div class="profile-name" id="profileName">Select a streamer</div>
+                            <div class="archetype-badge" id="archetypeBadge" title="Behavioral Archetype">
+                                <span class="archetype-icon">✨</span>
+                                <span class="archetype-name">Analyzing...</span>
+                            </div>
+                        </div>
                         <div class="profile-tags" id="profileTags">
                             <span class="profile-tag" id="profileLiveBadge">OFFLINE</span>
                         </div>
@@ -234,6 +244,29 @@
                     </div>
                     <div class="chart-wrap">
                         <canvas id="mainChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Deep Intelligence Card -->
+                <div class="intel-card" id="intelCard">
+                    <div class="intel-header">
+                        <span class="intel-title">Deep intelligence</span>
+                        <button class="intel-methodology-btn" onclick="openMethodology()">Methodology →</button>
+                    </div>
+                    <div class="intel-body">
+                        <div class="intel-stat-group">
+                            <div class="intel-stat">
+                                <span class="intel-stat-label">Optimal Stream Window</span>
+                                <span class="intel-stat-value" id="intelOptimalWindow">Gathering data...</span>
+                            </div>
+                            <div class="intel-stat">
+                                <span class="intel-stat-label">Similar Streamers</span>
+                                <div class="intel-similar-list" id="intelSimilarList">—</div>
+                            </div>
+                        </div>
+                        <div class="intel-description" id="archetypeDesc">
+                            Select a streamer to view behavioral archetype analysis and deep intelligence metrics.
+                        </div>
                     </div>
                 </div>
             </div>
@@ -303,6 +336,30 @@
         </section>
 
     </main>
+
+    <!-- Methodology Modal -->
+    <div class="modal-overlay" id="methodologyModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Research Methodology</h3>
+                <button class="modal-close" onclick="closeMethodology()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="methodology-section">
+                    <h4>1. Viewership Forecasting</h4>
+                    <p>We utilize <strong>Polynomial Ordinary Least Squares (OLS) Regression</strong> (Degree 2) to model viewership curves. The model calculates local maxima and velocity to predict the next 30 minutes of concurrent viewers with automated Confidence Interval (CI) bands.</p>
+                </div>
+                <div class="methodology-section">
+                    <h4>2. Chat Sentiment Intelligence</h4>
+                    <p>Our pipeline implements <strong>VADER (Valence Aware Dictionary and sEntiment Reasoner)</strong>, specifically tuned for Twitch vernacular (including Pog, Hype, and W/L detection), to compute real-time emotional volatility.</p>
+                </div>
+                <div class="methodology-section">
+                    <h4>3. Behavioral Archetyping</h4>
+                    <p>By analyzing cross-session consistency, duration distribution, and categorical variance, our clustering algorithm assigns streamers to specific archetypes like "Night Owl" or "Marathon Runner".</p>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Scripts -->

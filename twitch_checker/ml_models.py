@@ -134,6 +134,61 @@ def predict_peak_viewers(data_points: List[Dict]) -> Dict[str, Any]:
         "model_std_error": float(std_error)
     }
 
+def calculate_similarity(streamer_a_data: Dict, streamer_b_data: Dict) -> Dict[str, Any]:
+    """
+    Calculate similarity score between two streamers based on categories and viewer scale.
+    """
+    cats_a = set(c['name'] for c in streamer_a_data.get('category_breakdown', []))
+    cats_b = set(c['name'] for c in streamer_b_data.get('category_breakdown', []))
+    
+    if not cats_a or not cats_b:
+        category_sim = 0.0
+    else:
+        intersection = cats_a.intersection(cats_b)
+        union = cats_a.union(cats_b)
+        category_sim = len(intersection) / len(union)
+        
+    peak_a = streamer_a_data.get('best_peak_viewers', 1)
+    peak_b = streamer_b_data.get('best_peak_viewers', 1)
+    
+    # Scale similarity (how close are they in size)
+    scale_sim = 1.0 - min(1.0, abs(np.log10(max(1, peak_a)) - np.log10(max(1, peak_b))) / 5.0)
+    
+    total_sim = (category_sim * 0.6) + (scale_sim * 0.4)
+    
+    return {
+        "score": round(total_sim * 100, 1),
+        "category_overlap": list(cats_a.intersection(cats_b)),
+        "scale_match": round(scale_sim * 100, 1)
+    }
+
+def get_streamer_archetype(analytics: Dict) -> Dict[str, str]:
+    """
+    Determine the streamer's 'Archetype' based on their behavioral data.
+    """
+    avg_duration = analytics.get('avg_duration_minutes', 0)
+    consistency = analytics.get('consistency_score', 0)
+    peak = analytics.get('best_peak_viewers', 0)
+    hourly = analytics.get('hourly_activity', [0]*24)
+    
+    # Night Owl check (majority of streams between 10PM and 4AM)
+    night_hours = sum(hourly[22:] + hourly[:5])
+    total_hours = sum(hourly) or 1
+    is_night_owl = (night_hours / total_hours) > 0.6
+    
+    if peak > 100000:
+        return {"id": "titan", "name": "Streaming Titan", "desc": "A dominant force in the industry with massive reach."}
+    if avg_duration > 480:
+        return {"id": "marathon", "name": "Marathon Runner", "desc": "Known for incredibly long, high-endurance sessions."}
+    if consistency > 85:
+        return {"id": "clockwork", "name": "Clockwork Creator", "desc": "Extremely reliable schedule. Fans always know when to tune in."}
+    if is_night_owl:
+        return {"id": "nightowl", "name": "Night Owl", "desc": "Thrives in the late-night and early-morning hours."}
+    if len(analytics.get('category_breakdown', [])) > 10:
+        return {"id": "polymath", "name": "Variety Polymath", "desc": "Master of many games and categories."}
+        
+    return {"id": "rising", "name": "Rising Star", "desc": "Building a unique community and consistent presence."}
+
 if __name__ == "__main__":
     # Test
     msgs = ["W stream", "this is so boring L", "POGGERS POG POG", "hello guys"]

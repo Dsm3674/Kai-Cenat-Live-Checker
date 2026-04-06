@@ -17,7 +17,7 @@ from flask import Flask, jsonify, request, send_from_directory
 
 try:
     from database import log_stream_snapshot, get_recent_snapshots, log_chat_sentiment
-    from ml_models import predict_peak_viewers, analyze_chat_sentiment
+    from ml_models import predict_peak_viewers, analyze_chat_sentiment, get_streamer_archetype, calculate_similarity
 except ImportError:
     pass
 
@@ -210,7 +210,6 @@ class AppConfig:
     frontend_title: str
     flask_secret_key: str
 
-    @property
     def is_configured(self) -> bool:
         return (
             bool(self.client_id)
@@ -218,6 +217,27 @@ class AppConfig:
             and "YOUR_CLIENT" not in self.client_id
             and "YOUR_CLIENT" not in self.client_secret
         )
+
+    def save_to_file(self) -> None:
+        try:
+            config_data = load_json_file(CONFIG_PATH)
+            config_data["streamers"] = self.streamers
+            config_data["streamer_groups"] = self.streamer_groups
+            # Preserve other fields
+            config_data["client_id"] = self.client_id
+            config_data["client_secret"] = self.client_secret
+            config_data["check_interval"] = self.check_interval
+            config_data["discord_webhook"] = self.discord_webhook
+            config_data["enable_discord_notifications"] = self.enable_discord_notifications
+            config_data["history_limit"] = self.history_limit
+            config_data["snapshot_limit"] = self.snapshot_limit
+            config_data["event_limit"] = self.event_limit
+            config_data["alert_thresholds"] = self.alert_thresholds
+            config_data["frontend_title"] = self.frontend_title
+
+            CONFIG_PATH.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
+        except Exception as exc:
+            logging.error(f"Failed to save config: {exc}")
 
 
 def load_config() -> AppConfig:
@@ -294,7 +314,7 @@ class StreamStateStore:
     def recent_events(self, limit: int) -> list[dict[str, Any]]:
         return list(reversed(self.state.get("events", [])[-limit:]))
 
-    def analytics_for_login(self, login: str, current_card: dict[str, Any]) -> dict[str, Any]:
+    def _calculate_base_analytics(self, login: str, current_card: dict[str, Any]) -> dict[str, Any]:
         history = self.state.get("history", {}).get(login, [])
         snapshots = self.state.get("snapshots", {}).get(login, [])
         current_state = self.state.get("streams", {}).get(login, {})
@@ -355,6 +375,15 @@ class StreamStateStore:
             "recent_viewers": snapshots[-12:],
             "current_peak_viewers": current_state.get("peak_viewers", current_card.get("viewer_count", 0)),
         }
+
+    def analytics_for_login(self, login: str, current_card: dict[str, Any]) -> dict[str, Any]:
+        analytics = self._calculate_base_analytics(login, current_card)
+        try:
+            analytics["archetype"] = get_streamer_archetype(analytics)
+        except NameError:
+            analytics["archetype"] = {"id": "unknown", "name": "Analyzing...", "desc": "Still gathering data behavior patterns."}
+        return analytics
+
 
     def update(
         self,
@@ -716,9 +745,74 @@ class TwitchService:
                     "trend_score": analytics["trend_score"],
                     "top_category": analytics["top_category"],
                     "consistency_score": analytics["consistency_score"],
+                    "archetype": analytics.get("archetype")
                 }
             )
+        
+        # Add similarity scores between the first two if applicable
+        if len(compared) >= 2:
+            try:
+                card_a = next(c for c in dashboard["streamers"] if c["login"] == compared[0]["login"])
+                card_b = next(c for c in dashboard["streamers"] if c["login"] == compared[1]["login"])
+                similarity = calculate_similarity(card_a["analytics"], card_b["analytics"])
+                return {"generated_at": dashboard["generated_at"], "streamers": compared, "similarity": similarity}
+            except Exception:
+                pass
+
         return {"generated_at": dashboard["generated_at"], "streamers": compared}
+
+    def search_streamer(self, query: str) -> list[dict[str, Any]]:
+        if not query:
+            return []
+        
+        # Search for users matching the query
+        payload = self._request("search/channels", [("query", query), ("first", "10")])
+        results = []
+        for item in payload.get("data", []):
+            login = item["broadcaster_login"].lower()
+            results.append({
+                "login": login,
+                "display_name": item["display_name"],
+                "profile_image_url": item["thumbnail_url"],
+                "is_live": item["is_live"],
+                "game_name": item["game_name"],
+                "is_tracked": login in self.config.streamers
+            })
+        return results
+
+    def add_streamer(self, login: str) -> bool:
+        login = login.lower().strip()
+        if login in self.config.streamers:
+            return False
+            
+        # Verify user exists on Twitch
+        users = self._fetch_users([login])
+        if login not in users:
+            return False
+            
+        self.config.streamers.append(login)
+        # Add to "Featured" group if it exists, or just leave as is
+        if "Featured" in self.config.streamer_groups:
+            self.config.streamer_groups["Featured"].append(login)
+        else:
+            self.config.streamer_groups.setdefault("Other", []).append(login)
+            
+        self.config.save_to_file()
+        return True
+
+    def remove_streamer(self, login: str) -> bool:
+        login = login.lower().strip()
+        if login not in self.config.streamers:
+            return False
+            
+        self.config.streamers.remove(login)
+        # Remove from groups
+        for group in self.config.streamer_groups.values():
+            if login in group:
+                group.remove(login)
+        
+        self.config.save_to_file()
+        return True
 
     def _fetch_users(self, logins: list[str]) -> dict[str, dict[str, Any]]:
         payload = self._request("users", [("login", login) for login in logins])
@@ -1068,6 +1162,51 @@ def create_app() -> Flask:
             return jsonify({"error": "twitch_request_failed", "detail": str(exc)}), 502
         except RuntimeError as exc:
             return jsonify({"error": "configuration_error", "detail": str(exc)}), 503
+
+    @app.get("/api/search")
+    def search_streamer() -> Any:
+        query = request.args.get("q", "").strip()
+        if not query:
+            return jsonify([])
+        try:
+            return jsonify(service.search_streamer(query))
+        except Exception as exc:
+            app.logger.error(f"Search failed: {exc}")
+            return jsonify({"error": "search_failed", "detail": str(exc)}), 500
+
+    @app.post("/api/add_streamer")
+    def add_streamer() -> Any:
+        try:
+            data = request.get_json()
+            login = data.get("login", "").lower().strip()
+            if not login:
+                return jsonify({"error": "login_required"}), 400
+            
+            success = service.add_streamer(login)
+            if success:
+                return jsonify({"status": "success", "message": f"Added {login}"})
+            else:
+                return jsonify({"error": "already_tracked_or_not_found"}), 400
+        except Exception as exc:
+            app.logger.error(f"Add failed: {exc}")
+            return jsonify({"error": "add_failed", "detail": str(exc)}), 500
+
+    @app.post("/api/remove_streamer")
+    def remove_streamer() -> Any:
+        try:
+            data = request.get_json()
+            login = data.get("login", "").lower().strip()
+            if not login:
+                return jsonify({"error": "login_required"}), 400
+            
+            success = service.remove_streamer(login)
+            if success:
+                return jsonify({"status": "success", "message": f"Removed {login}"})
+            else:
+                return jsonify({"error": "not_tracked"}), 400
+        except Exception as exc:
+            app.logger.error(f"Remove failed: {exc}")
+            return jsonify({"error": "remove_failed", "detail": str(exc)}), 500
 
     return app
 

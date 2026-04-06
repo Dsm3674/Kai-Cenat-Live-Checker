@@ -8,26 +8,10 @@
 // ── Constants ──────────────────────────────────────────────
 const POLL_INTERVAL_MS  = 30_000;
 const COUNTER_FRAMES    = 30;
-const STREAMER_LIST = [
-    { login: 'kaicenat',   label: 'Kai Cenat'   },
-    { login: 'xqc',        label: 'xQc'          },
-    { login: 'pokimane',   label: 'Pokimane'     },
-    { login: 'fanum',      label: 'Fanum'        },
-    { login: 'hasanabi',   label: 'HasanAbi'     },
-    { login: 'shroud',     label: 'Shroud'       },
-    { login: 'asmongold',  label: 'Asmongold'   },
-    { login: 'ninja',      label: 'Ninja'        },
-    { login: 'caseoh_',    label: 'CaseOh'       },
-    { login: 'tarik',      label: 'Tarik'        },
-    { login: 'mizkif',     label: 'Mizkif'       },
-    { login: 'ironmouse',  label: 'Ironmouse'    },
-    { login: 'caedrel',    label: 'Caedrel'      },
-    { login: 'nmplol',     label: 'NmPlol'       },
-    { login: 'lirik',      label: 'Lirik'        },
-];
 
 // ── State ──────────────────────────────────────────────────
-let currentLogin        = 'kaicenat';
+let streamerList        = [];     // Loaded from /api/config
+let currentLogin        = '';
 let currentView         = 'dashboard';
 let mainChartInstance   = null;
 let compareChartInstance = null;
@@ -35,6 +19,7 @@ let categoryChartInstance = null;
 let lastDashboardData   = null;   // full /api/dashboard response
 let animFrameIds        = {};     // keyed animated counter RAF IDs
 let lastCounterValues   = {};     // last rendered values for smooth delta
+let searchTimeout       = null;
 
 // ═══════════════════════════════════════════════════════════
 // ANIMATED BACKGROUND CANVAS
@@ -169,33 +154,110 @@ function initStreamerPills() {
     if (!container) return;
     container.innerHTML = '';
 
-    STREAMER_LIST.forEach(s => {
+    streamerList.forEach(login => {
         const btn = document.createElement('button');
         btn.className = 'streamer-pill';
-        btn.id        = `pill-${s.login}`;
-        btn.textContent = s.label;
-        btn.onclick   = () => selectStreamer(s.login);
+        btn.id        = `pill-${login}`;
+        btn.textContent = login;
+        btn.onclick   = () => selectStreamer(login);
         container.appendChild(btn);
     });
+
+    // Update current login if empty
+    if (!currentLogin && streamerList.length > 0) {
+        currentLogin = streamerList[0];
+    }
 
     // Populate compare dropdowns
     ['compareSelectA', 'compareSelectB'].forEach((id, idx) => {
         const sel = document.getElementById(id);
         if (!sel) return;
         sel.innerHTML = '';
-        STREAMER_LIST.forEach(s => {
+        streamerList.forEach(login => {
             const opt = document.createElement('option');
-            opt.value = s.login;
-            opt.textContent = s.label;
-            if ((idx === 0 && s.login === 'kaicenat') || (idx === 1 && s.login === 'xqc')) {
+            opt.value = login;
+            opt.textContent = login;
+            if ((idx === 0 && login === streamerList[0]) || (idx === 1 && login === streamerList[1])) {
                 opt.selected = true;
             }
             sel.appendChild(opt);
         });
     });
 
-    selectStreamer(currentLogin);
+    if (currentLogin) selectStreamer(currentLogin);
 }
+
+// ═══════════════════════════════════════════════════════════
+// SEARCH & ADD STREAMER
+// ═══════════════════════════════════════════════════════════
+async function handleSearch(e) {
+    const query = e.target.value.trim();
+    const resultsContainer = document.getElementById('searchResults');
+    
+    if (query.length < 2) {
+        resultsContainer.style.display = 'none';
+        return;
+    }
+
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(async () => {
+        try {
+            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+            const data = await res.json();
+            
+            if (data.length === 0) {
+                resultsContainer.innerHTML = '<div class="search-result-item">No results found</div>';
+            } else {
+                resultsContainer.innerHTML = data.map(s => `
+                    <div class="search-result-item">
+                        <img src="${s.profile_image_url}" class="search-result-avatar">
+                        <div class="search-result-info">
+                            <div class="search-result-name">${s.display_name}</div>
+                            <div class="search-result-meta">${s.game_name || 'Searching...'}</div>
+                        </div>
+                        <button class="search-add-btn ${s.is_tracked ? 'tracked' : ''}" 
+                                onclick="addStreamer('${s.login}')" 
+                                ${s.is_tracked ? 'disabled' : ''}>
+                            ${s.is_tracked ? 'Tracked' : 'Add'}
+                        </button>
+                    </div>
+                `).join('');
+            }
+            resultsContainer.style.display = 'block';
+        } catch (err) {
+            console.error('Search failed:', err);
+        }
+    }, 300);
+}
+
+async function addStreamer(login) {
+    try {
+        const res = await fetch('/api/add_streamer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ login })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            document.getElementById('streamerSearch').value = '';
+            document.getElementById('searchResults').style.display = 'none';
+            await loadConfig(); // Reload everything
+            selectStreamer(login);
+        } else {
+            alert(data.error || 'Failed to add streamer');
+        }
+    } catch (err) {
+        console.error('Add failed:', err);
+    }
+}
+
+// Event Listeners for search
+document.getElementById('streamerSearch')?.addEventListener('input', handleSearch);
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.search-container')) {
+        document.getElementById('searchResults').style.display = 'none';
+    }
+});
 
 // ═══════════════════════════════════════════════════════════
 // VIEW SWITCHING
@@ -238,7 +300,21 @@ function selectStreamer(login) {
 // ═══════════════════════════════════════════════════════════
 // MAIN DATA FETCH
 // ═══════════════════════════════════════════════════════════
+async function loadConfig() {
+    try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+        streamerList = data.streamers || [];
+        initStreamerPills();
+    } catch (err) {
+        console.error('Failed to load config:', err);
+    }
+}
+
 async function fetchDashboard() {
+    if (streamerList.length === 0) {
+        await loadConfig();
+    }
     try {
         const res = await fetch('/api/dashboard');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -254,7 +330,7 @@ async function fetchDashboard() {
         if (currentView === 'compare') runCompare();
 
         // Fetch ML prediction for selected streamer
-        fetchMLPrediction(currentLogin);
+        if (currentLogin) fetchMLPrediction(currentLogin);
 
         setStatus('ok');
     } catch (err) {
@@ -293,10 +369,10 @@ function updateSidebar(data) {
     const alerts    = data.alerts    || [];
 
     // Update pill live indicators
-    STREAMER_LIST.forEach(s => {
-        const pill = document.getElementById(`pill-${s.login}`);
+    streamerList.forEach(login => {
+        const pill = document.getElementById(`pill-${login}`);
         if (!pill) return;
-        const card = streamers.find(c => c.login === s.login);
+        const card = streamers.find(c => c.login === login);
         if (card?.is_live) {
             pill.classList.add('pill-live');
         } else {
@@ -351,6 +427,7 @@ function updateDashboardView(data) {
     updateKPICards(card);
     updateViewerChart(card);
     updateAnomalyBanner(null); // will be updated by ML
+    updateIntelPanel(card);
 }
 
 function updateProfileCard(card) {
@@ -400,6 +477,15 @@ function updateProfileCard(card) {
         linkEl.href = card.url || `https://www.twitch.tv/${card.login}`;
     }
 
+    // Update Archetype Badge
+    const archetype = analytics.archetype || {};
+    const archBadge = document.getElementById('archetypeBadge');
+    if (archBadge) {
+        const nameEl = archBadge.querySelector('.archetype-name');
+        if (nameEl) nameEl.textContent = archetype.name || 'Analyzing...';
+        archBadge.title = archetype.desc || 'Still gathering behavioral data patterns.';
+    }
+
     // Add game + group tags
     const profileTags = document.getElementById('profileTags');
     if (profileTags) {
@@ -413,6 +499,37 @@ function updateProfileCard(card) {
             tags.push(`<span class="profile-tag">${escHtml(g)}</span>`);
         });
         profileTags.innerHTML = tags.join('');
+    }
+}
+
+function updateIntelPanel(card) {
+    const analytics = card.analytics || {};
+    
+    // Optimal Window
+    const hourly = analytics.hourly_activity || [];
+    const peakHour = hourly.indexOf(Math.max(...hourly));
+    const windowEl = document.getElementById('intelOptimalWindow');
+    if (windowEl) {
+        windowEl.textContent = peakHour >= 0 ? `${peakHour}:00 - ${peakHour + 2}:00` : 'Gathering data...';
+    }
+
+    // Description (Archetype)
+    const descEl = document.getElementById('archetypeDesc');
+    if (descEl && analytics.archetype) {
+        descEl.textContent = analytics.archetype.desc;
+    }
+
+    // Similar Streamers (Simulated or based on comparison)
+    const similarEl = document.getElementById('intelSimilarList');
+    if (similarEl && lastDashboardData) {
+        const others = lastDashboardData.streamers.filter(s => s.login !== card.login).slice(0, 3);
+        if (others.length > 0) {
+            similarEl.innerHTML = others.map(o => `
+                <span class="similar-streamer-tag" onclick="selectStreamer('${o.login}')" style="cursor:pointer">${o.display_name}</span>
+            `).join('');
+        } else {
+            similarEl.textContent = 'None tracked';
+        }
     }
 }
 
@@ -573,7 +690,7 @@ function generateAIInsight(login, pred) {
 
 function generateAIInsightBasic(login) {
     const card = (lastDashboardData?.streamers || []).find(s => s.login === login);
-    const displayName = STREAMER_LIST.find(s => s.login === login)?.label || login;
+    const displayName = login;
 
     if (!card) {
         el('aiInsightText').textContent =
@@ -1045,6 +1162,19 @@ function renderCategoryChart(categories) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// MODAL CONTROLS
+// ═══════════════════════════════════════════════════════════
+function openMethodology() {
+    const modal = document.getElementById('methodologyModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeMethodology() {
+    const modal = document.getElementById('methodologyModal');
+    if (modal) modal.style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════════════════
 // UTILITIES
 // ═══════════════════════════════════════════════════════════
 function el(id) { return document.getElementById(id); }
@@ -1070,8 +1200,8 @@ function formatRelTime(isoStr) {
 // ═══════════════════════════════════════════════════════════
 // BOOTSTRAP
 // ═══════════════════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', () => {
-    initStreamerPills();
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadConfig();
     fetchDashboard();
     setInterval(fetchDashboard, POLL_INTERVAL_MS);
 });
