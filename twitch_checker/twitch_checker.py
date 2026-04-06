@@ -15,6 +15,12 @@ import requests
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, send_from_directory
 
+try:
+    from database import log_stream_snapshot, get_recent_snapshots, log_chat_sentiment
+    from ml_models import predict_peak_viewers, analyze_chat_sentiment
+except ImportError:
+    pass
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 PACKAGE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = PACKAGE_DIR / "config.json"
@@ -614,6 +620,17 @@ class TwitchService:
             if any(event["type"] == "went_live" for event in generated_events):
                 self._send_discord_notification(login, display_name, user, stream)
 
+            try:
+                if is_live:
+                    log_stream_snapshot(login, viewer_count, game_name, title)
+                    # For demo purposes, we will feed a hardcoded chat snippet depending on viewers
+                    # because IRC takes continuous polling.
+                    demo_msgs = ["POG", "w stream", "hype"] if viewer_count > 10000 else ["nice", "hello block"]
+                    sentiment_data = analyze_chat_sentiment(demo_msgs)
+                    log_chat_sentiment(login, sentiment_data['score'], len(demo_msgs))
+            except NameError:
+                pass
+
             card = {
                 "login": login,
                 "display_name": display_name,
@@ -969,6 +986,23 @@ def create_app() -> Flask:
                 ),
             }
         )
+
+    @app.get("/api/ml/predict/<login>")
+    def predict(login: str) -> Any:
+        try:
+            normalized = login.lower().strip()
+            recent_db_snaps = get_recent_snapshots(normalized, 60)
+            if not recent_db_snaps:
+                return jsonify({"status": "no_data_in_db"})
+            
+            prediction = predict_peak_viewers(recent_db_snaps)
+            return jsonify({
+                "login": normalized,
+                "prediction": prediction,
+                "data_points_used": len(recent_db_snaps)
+            })
+        except NameError:
+            return jsonify({"status": "ml_not_enabled"}), 501
 
     @app.get("/api/config")
     def frontend_config() -> Any:
