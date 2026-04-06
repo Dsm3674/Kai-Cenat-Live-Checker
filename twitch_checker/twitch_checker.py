@@ -33,23 +33,26 @@ TWITCH_API_BASE = "https://api.twitch.tv/helix"
 DEFAULT_ALERT_THRESHOLDS = [1000, 5000, 10000, 25000, 50000, 100000]
 DEFAULT_STREAMERS = [
     "kaicenat",
+    "xqc",
     "pokimane",
-    "caseoh_",
     "fanum",
-    "tarik",
     "hasanabi",
     "shroud",
-    "xqc",
-    "mizkif",
-    "nmplol",
     "asmongold",
+    "ninja",
+    "caseoh_",
+    "tarik",
+    "mizkif",
+    "ironmouse",
+    "caedrel",
+    "nmplol",
     "lirik",
 ]
 DEFAULT_GROUPS = {
-    "AMP": ["kaicenat", "fanum"],
-    "Creators": ["pokimane", "hasanabi", "mizkif", "nmplol"],
-    "FPS": ["tarik", "shroud", "xqc"],
-    "Variety": ["caseoh_", "asmongold", "lirik"],
+    "🏆 Kings":    ["kaicenat", "xqc", "ninja"],
+    "🎮 Gaming":   ["shroud", "tarik", "caedrel", "asmongold", "lirik"],
+    "🎙️ Variety":  ["fanum", "caseoh_", "mizkif", "nmplol"],
+    "🌟 Creators": ["pokimane", "hasanabi", "ironmouse"],
 }
 
 

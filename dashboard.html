@@ -3,72 +3,309 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enterprise Stream Telemetry</title>
-    <!-- Public Sans for crisp UI text, Space Mono for raw data -->
-    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>StreamPulse — Live Intelligence Platform</title>
+    <meta name="description" content="StreamPulse: Real-time multi-streamer analytics powered by machine learning. Track top Twitch creators with live viewership, predictions, and anomaly detection.">
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <!-- Main Stylesheet -->
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 
-    <div class="app-container">
-        <div class="header">
-            <div class="header-content">
-                <h1>Stream Telemetry</h1>
-                <p><span class="live-indicator"></span> Real-Time Analytics Pipeline</p>
+<!-- Animated Background Canvas -->
+<canvas id="bgCanvas" aria-hidden="true"></canvas>
+
+<!-- App Shell -->
+<div class="app-shell">
+
+    <!-- ═══════════════════════════════════════════
+         SIDEBAR
+    ═══════════════════════════════════════════ -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
             </div>
-            <div class="controls">
-                <select id="streamerSelect" onchange="fetchData()">
-                    <option value="kaicenat">KAI CENAT</option>
-                    <option value="xqc">XQC</option>
-                    <option value="fanum">FANUM</option>
-                    <option value="pokimane">POKIMANE</option>
-                    <option value="asmongold">ASMONGOLD</option>
-                    <option value="hasanabi">HASANabi</option>
-                </select>
-            </div>
+            <span class="brand-name">StreamPulse</span>
         </div>
 
-        <div id="anomalyBanner" class="anomaly-alert">
-            <div class="anomaly-text">⚠️ VIRAL ANOMALY DETECTED: UNUSUAL GROWTH RATE (RAID?)</div>
-            <div id="anomalyDetails" class="badge">Z-SCORE: 0.00</div>
+        <nav class="sidebar-nav">
+            <button class="nav-item active" id="nav-dashboard" onclick="switchView('dashboard')" aria-label="Dashboard view">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+                <span>Dashboard</span>
+            </button>
+            <button class="nav-item" id="nav-compare" onclick="switchView('compare')" aria-label="Compare streamers view">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                <span>Compare</span>
+            </button>
+            <button class="nav-item" id="nav-leaderboard" onclick="switchView('leaderboard')" aria-label="Leaderboard view">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6H21"/><path d="M8 12H21"/><path d="M8 18H21"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+                <span>Leaderboard</span>
+            </button>
+        </nav>
+
+        <!-- Sidebar: Live Streamer Quick List -->
+        <div class="sidebar-section-label">LIVE NOW</div>
+        <div class="sidebar-live-list" id="sidebarLiveList">
+            <div class="sidebar-live-placeholder">Loading...</div>
         </div>
 
-        <div class="grid">
-            <div class="panel">
-                <div class="panel-header">
-                    <h3>Prediction (30m)</h3>
-                    <span id="kpi-predict-trend" class="badge stable">WAITING</span>
+        <!-- Sidebar: Alert Feed -->
+        <div class="sidebar-section-label" style="margin-top:auto;">EVENTS</div>
+        <div class="sidebar-alerts" id="sidebarAlerts">
+            <div class="sidebar-live-placeholder">No events yet</div>
+        </div>
+    </aside>
+
+    <!-- ═══════════════════════════════════════════
+         MAIN CONTENT
+    ═══════════════════════════════════════════ -->
+    <main class="main-content">
+
+        <!-- Top Header Bar -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <div class="live-pulse-dot" id="globalPulseDot" title="System status"></div>
+                <span class="topbar-title" id="topbarTitle">Loading...</span>
+            </div>
+            <div class="topbar-right">
+                <div class="stat-chip" id="chipLive" title="Streamers currently live">
+                    <span class="chip-label">LIVE</span>
+                    <span class="chip-value" id="chipLiveVal">—</span>
                 </div>
-                <p id="kpi-predict" class="stat-value">---</p>
-                <p class="stat-sub">Model: Polynomial OLS</p>
+                <div class="stat-chip" id="chipViewers" title="Total concurrent viewers">
+                    <span class="chip-label">VIEWERS</span>
+                    <span class="chip-value" id="chipViewersVal">—</span>
+                </div>
+                <div class="stat-chip" id="chipTracked" title="Streamers being tracked">
+                    <span class="chip-label">TRACKED</span>
+                    <span class="chip-value" id="chipTrackedVal">—</span>
+                </div>
+                <div class="topbar-time" id="topbarTime"></div>
             </div>
+        </header>
 
-            <div class="panel">
-                <div class="panel-header">
-                    <h3>Error Margin</h3>
-                    <span class="badge stable">MSE</span>
-                </div>
-                <p id="kpi-error" class="stat-value">---</p>
-                <p class="stat-sub">95% Confidence (±)</p>
-            </div>
-            
-            <div class="panel">
-                <div class="panel-header">
-                    <h3>Sentiment Volatility</h3>
-                    <span id="kpi-sentiment-badge" class="badge stable">NLP</span>
-                </div>
-                <p id="kpi-sentiment" class="stat-value">---</p>
-                <p class="stat-sub" id="kpi-sentiment-vol">Var: ---</p>
-            </div>
+        <!-- Anomaly Banner -->
+        <div class="anomaly-banner" id="anomalyBanner" style="display:none;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span id="anomalyText">VIRAL ANOMALY DETECTED</span>
+            <span class="anomaly-badge" id="anomalyBadge">Z-SCORE: 0.00</span>
         </div>
 
-        <!-- Charts Row -->
-        <div class="chart-container">
-            <canvas id="mainChart"></canvas>
-        </div>
-    </div>
+        <!-- ═══════ VIEW: DASHBOARD ═══════ -->
+        <section class="view" id="view-dashboard">
 
-    <script src="/static/js/app.js" defer></script>
+            <!-- Streamer Selector Row -->
+            <div class="selector-row">
+                <div class="selector-label">SELECT STREAMER</div>
+                <div class="streamer-pills" id="streamerPills">
+                    <!-- Dynamically populated -->
+                </div>
+            </div>
+
+            <!-- KPI Cards Row -->
+            <div class="kpi-row" id="kpiRow">
+                <!-- Card 1: Live Status -->
+                <div class="kpi-card" id="kpiLiveStatus" data-glow="purple">
+                    <div class="kpi-card-header">
+                        <div class="kpi-icon kpi-icon-purple">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+                        </div>
+                        <span class="kpi-label">STATUS</span>
+                        <span class="kpi-badge" id="kpiBadgeStatus">—</span>
+                    </div>
+                    <div class="kpi-value" id="kpiViewers">—</div>
+                    <div class="kpi-sub" id="kpiGame">Waiting for data...</div>
+                </div>
+
+                <!-- Card 2: Prediction -->
+                <div class="kpi-card" id="kpiPredCard" data-glow="cyan">
+                    <div class="kpi-card-header">
+                        <div class="kpi-icon kpi-icon-cyan">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                        </div>
+                        <span class="kpi-label">30-MIN PREDICTION</span>
+                        <span class="kpi-badge" id="kpiBadgeTrend">OLS MODEL</span>
+                    </div>
+                    <div class="kpi-value" id="kpiPredict">—</div>
+                    <div class="kpi-sub" id="kpiError">Confidence: ±—</div>
+                </div>
+
+                <!-- Card 3: Sentiment -->
+                <div class="kpi-card" id="kpiSentCard" data-glow="green">
+                    <div class="kpi-card-header">
+                        <div class="kpi-icon kpi-icon-green">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        </div>
+                        <span class="kpi-label">CHAT SENTIMENT</span>
+                        <span class="kpi-badge" id="kpiBadgeSentiment">NLP</span>
+                    </div>
+                    <div class="kpi-value" id="kpiSentiment">—</div>
+                    <div class="kpi-sub" id="kpiSentimentVol">Volatility: —</div>
+                </div>
+
+                <!-- Card 4: Anomaly -->
+                <div class="kpi-card" id="kpiAnomalyCard" data-glow="red">
+                    <div class="kpi-card-header">
+                        <div class="kpi-icon kpi-icon-red">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        </div>
+                        <span class="kpi-label">ANOMALY DETECTION</span>
+                        <span class="kpi-badge" id="kpiBadgeAnomaly">Z-SCORE</span>
+                    </div>
+                    <div class="kpi-value" id="kpiAnomalyStatus">CLEAR</div>
+                    <div class="kpi-sub" id="kpiAnomalySub">No viral spikes detected</div>
+                </div>
+
+                <!-- Card 5: Uptime -->
+                <div class="kpi-card" id="kpiUptimeCard" data-glow="orange">
+                    <div class="kpi-card-header">
+                        <div class="kpi-icon kpi-icon-orange">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        </div>
+                        <span class="kpi-label">STREAM UPTIME</span>
+                        <span class="kpi-badge">SESSION</span>
+                    </div>
+                    <div class="kpi-value" id="kpiUptime">—</div>
+                    <div class="kpi-sub" id="kpiTitle">No stream data</div>
+                </div>
+            </div>
+
+            <!-- AI Insight Card -->
+            <div class="ai-insight-card" id="aiInsightCard">
+                <div class="ai-insight-header">
+                    <div class="ai-dot-group">
+                        <span class="ai-dot" style="background:var(--accent-purple)"></span>
+                        <span class="ai-dot" style="background:var(--accent-cyan)"></span>
+                        <span class="ai-dot" style="background:var(--accent-green)"></span>
+                    </div>
+                    <span class="ai-label">AI ANALYST</span>
+                    <span class="ai-model-tag">Polynomial OLS + VADER NLP</span>
+                </div>
+                <div class="ai-insight-text" id="aiInsightText">
+                    Initializing analysis pipeline... Select a streamer to generate insights.
+                </div>
+            </div>
+
+            <!-- Streamer Profile + Chart -->
+            <div class="content-grid">
+                <!-- Profile Card -->
+                <div class="profile-card" id="profileCard">
+                    <div class="profile-avatar-wrap">
+                        <img class="profile-avatar" id="profileAvatar" src="" alt="Streamer avatar" onerror="this.style.display='none'">
+                        <div class="profile-avatar-placeholder" id="profileAvatarPlaceholder">?</div>
+                        <div class="profile-live-ring" id="profileLiveRing"></div>
+                    </div>
+                    <div class="profile-info">
+                        <div class="profile-name" id="profileName">Select a streamer</div>
+                        <div class="profile-tags" id="profileTags">
+                            <span class="profile-tag" id="profileLiveBadge">OFFLINE</span>
+                        </div>
+                        <div class="profile-stats">
+                            <div class="profile-stat">
+                                <span class="profile-stat-val" id="profilePeak">—</span>
+                                <span class="profile-stat-label">Peak Ever</span>
+                            </div>
+                            <div class="profile-stat">
+                                <span class="profile-stat-val" id="profileSessions">—</span>
+                                <span class="profile-stat-label">Sessions</span>
+                            </div>
+                            <div class="profile-stat">
+                                <span class="profile-stat-val" id="profileConsistency">—</span>
+                                <span class="profile-stat-label">Consistency</span>
+                            </div>
+                        </div>
+                        <a class="profile-link" id="profileLink" href="#" target="_blank" rel="noopener">
+                            Watch Live on Twitch →
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Chart Card -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <span class="chart-title" id="chartTitle">Viewer Timeline</span>
+                        <span class="chart-meta" id="chartMeta">— data points</span>
+                    </div>
+                    <div class="chart-wrap">
+                        <canvas id="mainChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ═══════ VIEW: COMPARE ═══════ -->
+        <section class="view" id="view-compare" style="display:none;">
+            <div class="view-header">
+                <h2 class="view-title">Head-to-Head Comparison</h2>
+                <p class="view-subtitle">Pick two streamers and compare their live performance</p>
+            </div>
+
+            <div class="compare-selectors">
+                <div class="compare-selector-group">
+                    <label class="compare-selector-label">STREAMER A</label>
+                    <select id="compareSelectA" class="compare-select" onchange="runCompare()">
+                        <!-- populated dynamically -->
+                    </select>
+                </div>
+                <div class="compare-vs">VS</div>
+                <div class="compare-selector-group">
+                    <label class="compare-selector-label">STREAMER B</label>
+                    <select id="compareSelectB" class="compare-select" onchange="runCompare()">
+                        <!-- populated dynamically -->
+                    </select>
+                </div>
+            </div>
+
+            <div class="compare-grid" id="compareGrid">
+                <div class="compare-loading">Select two streamers to compare</div>
+            </div>
+
+            <!-- Compare Chart -->
+            <div class="chart-card" id="compareChartCard" style="display:none;">
+                <div class="chart-header">
+                    <span class="chart-title">Viewer Comparison</span>
+                    <span class="chart-meta" id="compareChartMeta">Loading...</span>
+                </div>
+                <div class="chart-wrap">
+                    <canvas id="compareChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════ VIEW: LEADERBOARD ═══════ -->
+        <section class="view" id="view-leaderboard" style="display:none;">
+            <div class="view-header">
+                <h2 class="view-title">Live Leaderboard</h2>
+                <p class="view-subtitle">Real-time rankings across all tracked streamers</p>
+            </div>
+
+            <div class="leaderboard-grid" id="leaderboardGrid">
+                <div class="leaderboard-loading">Loading rankings...</div>
+            </div>
+
+            <!-- Category Mix -->
+            <div class="chart-card" style="margin-top:2rem;">
+                <div class="chart-header">
+                    <span class="chart-title">Category Distribution</span>
+                    <span class="chart-meta">Most-played games across all sessions</span>
+                </div>
+                <div class="chart-wrap" style="height:280px;">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<!-- Scripts -->
+<script src="/static/js/app.js" defer></script>
 </body>
 </html>
