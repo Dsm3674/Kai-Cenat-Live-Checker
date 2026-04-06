@@ -936,6 +936,10 @@ def create_app() -> Flask:
     @app.get("/kaiCenat.js")
     def script() -> Any:
         return send_from_directory(BASE_DIR, "kaiCenat.js")
+        
+    @app.get("/dashboard")
+    def ml_dashboard() -> Any:
+        return send_from_directory(BASE_DIR, "dashboard.html")
 
     @app.get("/api/health")
     def health() -> Any:
