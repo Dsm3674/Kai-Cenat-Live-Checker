@@ -223,6 +223,15 @@ function selectStreamer(login) {
     });
     const pill = document.getElementById(`pill-${login}`);
     if (pill) pill.classList.add('active');
+
+    // Immediately render from cache so the UI snaps to the new streamer
+    // without waiting for a full network round-trip
+    if (lastDashboardData) {
+        updateDashboardView(lastDashboardData);
+        updateSidebar(lastDashboardData);
+    }
+
+    // Then fire new fetch + ML in background
     fetchDashboard();
 }
 
@@ -441,6 +450,9 @@ async function fetchMLPrediction(login) {
 
         const pred = data.prediction || data;
 
+        // Always pre-generate a basic insight immediately so the card is never blank
+        generateAIInsightBasic(login);
+
         if (pred.status === 'success') {
             animateCounter('kpiPredict', pred.predicted_peak, fmtViewers);
             el('kpiError').textContent = `Confidence: ±${fmtViewers(Math.round(pred.model_std_error || 0))}`;
@@ -485,6 +497,7 @@ async function fetchMLPrediction(login) {
         console.warn('[StreamPulse] ML fetch failed:', err);
         el('kpiPredict').textContent = 'N/A';
         el('kpiError').textContent   = 'ML not available';
+        generateAIInsightBasic(login);
     }
 }
 
@@ -560,7 +573,13 @@ function generateAIInsight(login, pred) {
 
 function generateAIInsightBasic(login) {
     const card = (lastDashboardData?.streamers || []).find(s => s.login === login);
-    if (!card) return;
+    const displayName = STREAMER_LIST.find(s => s.login === login)?.label || login;
+
+    if (!card) {
+        el('aiInsightText').textContent =
+            `Loading intelligence data for ${displayName}... Waiting for next data poll.`;
+        return;
+    }
     const name = card.display_name;
     if (card.is_live) {
         el('aiInsightText').textContent =
