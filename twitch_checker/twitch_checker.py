@@ -761,6 +761,13 @@ class TwitchService:
 
         return {"generated_at": dashboard["generated_at"], "streamers": compared}
 
+    def get_config(self) -> dict[str, Any]:
+        return {
+            "streamers": self.config.streamers,
+            "streamer_groups": self.config.streamer_groups,
+            "frontend_title": self.config.frontend_title
+        }
+
     def search_streamer(self, query: str) -> list[dict[str, Any]]:
         if not query:
             return []
@@ -1152,6 +1159,14 @@ def create_app() -> Flask:
             return jsonify({"error": "twitch_request_failed", "detail": str(exc)}), 502
         except RuntimeError as exc:
             return jsonify({"error": "configuration_error", "detail": str(exc)}), 503
+
+    @app.get("/api/config")
+    def get_config() -> Any:
+        try:
+            return jsonify(service.get_config())
+        except Exception as exc:
+            app.logger.error(f"Failed to fetch config: {exc}")
+            return jsonify({"error": "config_failed", "detail": str(exc)}), 500
 
     @app.get("/api/analytics/stream/<login>")
     def analytics_stream(login: str) -> Any:
