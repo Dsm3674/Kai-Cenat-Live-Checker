@@ -1115,13 +1115,13 @@ def create_app() -> Flask:
     def health() -> Any:
         error = service.config_error()
         status = {
-            "ok": error is None,
+            "ok": True,
             "configured": error is None,
             "error": error,
             "generated_at": utc_now_iso(),
             "cache_age_seconds": service.cache_age_seconds(),
         }
-        return jsonify(status), (200 if error is None else 503)
+        return jsonify(status), 200
 
     @app.get("/api/config")
     def frontend_config() -> Any:
