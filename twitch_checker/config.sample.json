@@ -1,0 +1,32 @@
+{
+  "client_id": "YOUR_CLIENT_ID_HERE",
+  "client_secret": "YOUR_CLIENT_SECRET_HERE",
+  "streamers": [
+    "kaicenat",
+    "pokimane",
+    "caseoh_",
+    "fanum",
+    "tarik",
+    "hasanabi",
+    "shroud",
+    "xqc",
+    "mizkif",
+    "nmplol",
+    "asmongold",
+    "lirik"
+  ],
+  "streamer_groups": {
+    "AMP": ["kaicenat", "fanum"],
+    "Creators": ["pokimane", "hasanabi", "mizkif", "nmplol"],
+    "FPS": ["tarik", "shroud", "xqc"],
+    "Variety": ["caseoh_", "asmongold", "lirik"]
+  },
+  "check_interval": 60,
+  "discord_webhook": "",
+  "enable_discord_notifications": false,
+  "history_limit": 12,
+  "snapshot_limit": 72,
+  "event_limit": 30,
+  "alert_thresholds": [1000, 5000, 10000, 25000, 50000, 100000],
+  "frontend_title": "Twitch Live Radar"
+}

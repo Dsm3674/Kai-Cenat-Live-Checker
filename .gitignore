@@ -1,0 +1,12 @@
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.env
+**/.env
+data/
+**/data/
+twitch_checker/config.json
+**/twitch_checker/config.json
+.DS_Store

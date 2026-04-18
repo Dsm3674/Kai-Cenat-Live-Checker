@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audience Signal Lab</title>
+    <meta name="description" content="Audience Signal Lab tracks Twitch creators, forecasts audience movement, detects anomalies, and now lets you watch streams directly inside the app.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="page-aura page-aura-one"></div>
+    <div class="page-aura page-aura-two"></div>
+    <div class="page-grid" aria-hidden="true"></div>
+
+    <div class="app-shell">
+        <section id="systemBanner" class="system-banner hidden" aria-live="polite"></section>
+
+        <section class="mission-strip" aria-label="System overview">
+            <article class="mission-card mission-card-primary">
+                <span class="mission-label">System mode</span>
+                <strong id="missionMode">Connecting</strong>
+                <p id="missionModeMeta">Checking Twitch credentials and dashboard cache.</p>
+            </article>
+
+            <article class="mission-card">
+                <span class="mission-label">Dominant category</span>
+                <strong id="missionCategory">Awaiting data</strong>
+                <p id="missionCategoryMeta">Category concentration appears once watchlist history is available.</p>
+            </article>
+
+            <article class="mission-card">
+                <span class="mission-label">Heat check</span>
+                <strong id="missionHeat">No live leader</strong>
+                <p id="missionHeatMeta">The hottest live creator will appear here when telemetry is active.</p>
+            </article>
+
+            <article class="mission-card">
+                <span class="mission-label">Refresh cadence</span>
+                <strong id="missionRefresh">60s cycle</strong>
+                <p id="missionRefreshMeta">Cache and polling state update here.</p>
+            </article>
+        </section>
+
+        <header class="hero panel">
+            <div class="hero-copy">
+                <p class="eyebrow">Audience Signal Lab</p>
+                <h1 id="appTitle">Audience Signal Lab</h1>
+                <p class="hero-text">
+                    Track live Twitch momentum, estimate short-horizon audience peaks, manage a watchlist,
+                    and watch the selected channel directly inside the dashboard.
+                </p>
+                <div class="hero-tag-row">
+                    <span class="hero-tag">Cached live telemetry</span>
+                    <span class="hero-tag">Forecast diagnostics</span>
+                    <span class="hero-tag">Embedded stream player</span>
+                    <span class="hero-tag">Portfolio-grade UX</span>
+                </div>
+            </div>
+
+            <div class="hero-side">
+                <div class="hero-controls">
+                    <label class="field">
+                        <span>Focus streamer</span>
+                        <select id="streamerSelect" aria-label="Focus streamer"></select>
+                    </label>
+                    <button id="refreshButton" class="button button-primary" type="button">Refresh live data</button>
+                </div>
+
+                <div class="search-shell">
+                    <label class="field field-search">
+                        <span>Expand watchlist</span>
+                        <input id="streamerSearch" type="search" autocomplete="off" placeholder="Search Twitch by login or channel name">
+                    </label>
+                    <div id="searchResults" class="search-results hidden" aria-live="polite"></div>
+                </div>
+
+                <div class="hero-stat-grid">
+                    <article class="hero-stat">
+                        <span>Tracked</span>
+                        <strong id="heroTrackedCount">0</strong>
+                        <p>monitored creators</p>
+                    </article>
+                    <article class="hero-stat">
+                        <span>Live now</span>
+                        <strong id="heroLiveCount">0</strong>
+                        <p>active sessions</p>
+                    </article>
+                    <article class="hero-stat">
+                        <span>Viewers</span>
+                        <strong id="heroViewerTotal">0</strong>
+                        <p>cohort audience</p>
+                    </article>
+                    <article class="hero-stat">
+                        <span>Last sync</span>
+                        <strong id="heroLastUpdated">Waiting</strong>
+                        <p id="heroUpdateMeta">loading control plane</p>
+                    </article>
+                </div>
+            </div>
+        </header>
+
+        <section class="kpi-grid">
+            <article class="kpi-card accent-card">
+                <div class="kpi-head">
+                    <span>Predicted Peak</span>
+                    <span id="kpiTrendBadge" class="pill neutral">Calibrating</span>
+                </div>
+                <strong id="kpiPredict">--</strong>
+                <p>30-minute projected audience ceiling for the selected streamer.</p>
+            </article>
+
+            <article class="kpi-card">
+                <div class="kpi-head">
+                    <span>Confidence Band</span>
+                    <span id="kpiConfidenceBadge" class="pill neutral">Model quality</span>
+                </div>
+                <strong id="kpiError">--</strong>
+                <p id="kpiErrorMeta">Approximate forecast uncertainty and recent model quality.</p>
+            </article>
+
+            <article class="kpi-card">
+                <div class="kpi-head">
+                    <span>Current Viewers</span>
+                    <span class="pill neutral">Live signal</span>
+                </div>
+                <strong id="kpiCurrent">--</strong>
+                <p>Real-time audience count for the active creator selection.</p>
+            </article>
+
+            <article class="kpi-card">
+                <div class="kpi-head">
+                    <span>Consistency Score</span>
+                    <span class="pill neutral">Behavioral</span>
+                </div>
+                <strong id="kpiConsistency">--</strong>
+                <p>How regularly the creator appears across recent tracked sessions.</p>
+            </article>
+
+            <article class="kpi-card">
+                <div class="kpi-head">
+                    <span>Average Session</span>
+                    <span class="pill neutral">Retention proxy</span>
+                </div>
+                <strong id="kpiSession">--</strong>
+                <p>Average stream duration inferred from locally stored history.</p>
+            </article>
+
+            <article class="kpi-card">
+                <div class="kpi-head">
+                    <span>Anomaly Watch</span>
+                    <span class="pill neutral">Event engine</span>
+                </div>
+                <strong id="kpiAnomaly">Normal</strong>
+                <p id="kpiAnomalyMeta">No abnormal growth spikes are currently flagged.</p>
+            </article>
+        </section>
+
+        <main class="dashboard-grid">
+            <section class="panel forecast-panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="panel-kicker">Forecast surface</p>
+                        <h2>Forecast Canvas</h2>
+                        <p>Actual viewer snapshots, short-horizon forecast, and confidence envelope for the selected streamer.</p>
+                    </div>
+                    <div class="panel-status-cluster">
+                        <div id="selectedStatusPill" class="pill neutral">Awaiting data</div>
+                        <div id="forecastSamples" class="panel-chip panel-chip-muted">No samples</div>
+                    </div>
+                </div>
+                <div class="chart-wrap">
+                    <canvas id="mainChart"></canvas>
+                    <div id="chartState" class="chart-state hidden"></div>
+                </div>
+            </section>
+
+            <section class="panel stream-panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="panel-kicker">Embedded view</p>
+                        <h2>Live Watch</h2>
+                        <p>Watch the selected Twitch channel directly inside the app while keeping the analytics in view.</p>
+                    </div>
+                </div>
+                <div class="player-shell">
+                    <iframe
+                        id="streamPlayer"
+                        class="player-frame hidden"
+                        title="Twitch stream player"
+                        allowfullscreen
+                        scrolling="no"
+                        frameborder="0"
+                    ></iframe>
+                    <div id="playerState" class="player-state">Choose a streamer to load the embedded Twitch player.</div>
+                </div>
+                <p id="playerMeta" class="player-meta">The player uses Twitch's official embed and follows the current host domain automatically.</p>
+            </section>
+
+            <section class="panel profile-panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="panel-kicker">Focused brief</p>
+                        <h2>Executive Brief</h2>
+                        <p>High-level profile for the active creator and what the model is seeing.</p>
+                    </div>
+                </div>
+                <div class="profile-card">
+                    <div class="profile-topline">
+                        <div>
+                            <p class="profile-label">Selected streamer</p>
+                            <h3 id="selectedName">Waiting for data</h3>
+                            <p id="selectedLogin" class="profile-handle">@streamer</p>
+                        </div>
+                        <div class="profile-actions">
+                            <button id="removeStreamerButton" class="button button-danger" type="button">Remove</button>
+                            <a id="watchLink" class="button button-secondary" href="https://www.twitch.tv" target="_blank" rel="noreferrer">Open channel</a>
+                        </div>
+                    </div>
+                    <p id="selectedTitle" class="profile-title">Connect data to view the live title and creator profile.</p>
+                    <p id="selectedDescription" class="profile-description">This panel becomes a concise executive summary for one streamer at a time.</p>
+                    <div id="selectedGroups" class="chip-row"></div>
+                    <dl class="profile-metrics">
+                        <div>
+                            <dt>Category</dt>
+                            <dd id="selectedCategory">--</dd>
+                        </div>
+                        <div>
+                            <dt>Uptime</dt>
+                            <dd id="selectedUptime">--</dd>
+                        </div>
+                        <div>
+                            <dt>Peak</dt>
+                            <dd id="selectedPeak">--</dd>
+                        </div>
+                        <div>
+                            <dt>Sessions</dt>
+                            <dd id="selectedSessions">--</dd>
+                        </div>
+                    </dl>
+                    <div class="insight-box">
+                        <span class="profile-label">Research note</span>
+                        <p id="selectedInsight">The dashboard will summarize current momentum, historical consistency, model quality, and anomaly risk here.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="panel-kicker">Competitive stack</p>
+                        <h2>Leaderboard Stack</h2>
+                        <p>Competitive ranking across live audience, peaks, activity, and momentum.</p>
+                    </div>
+                </div>
+                <div id="leaderboardList" class="leaderboard-grid"></div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="panel-kicker">Cohort read</p>
+                        <h2>Cohort Groups</h2>
+                        <p>How viewership clusters across creator communities and watchlist buckets.</p>
+                    </div>
+                </div>
+                <div id="groupSummary" class="stack-list"></div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="panel-kicker">Taxonomy view</p>
+                        <h2>Category Mix</h2>
+                        <p>Where the watchlist is concentrating its recent streaming attention.</p>
+                    </div>
+                </div>
+                <div id="categoryMix" class="bars-list"></div>
+            </section>
+
+            <section class="panel panel-wide">
+                <div class="panel-heading">
+                    <div>
+                        <p class="panel-kicker">Session archive</p>
+                        <h2>Recent Sessions</h2>
+                        <p>Short archival history for the selected streamer so the project feels analytical, not just reactive.</p>
+                    </div>
+                </div>
+                <div id="sessionList" class="session-list"></div>
+            </section>
+
+            <section class="panel panel-wide">
+                <div class="panel-heading">
+                    <div>
+                        <p class="panel-kicker">Event wire</p>
+                        <h2>Event Feed</h2>
+                        <p>Go-live changes, category switches, and milestone crossings captured by the monitoring engine.</p>
+                    </div>
+                </div>
+                <div id="alertsFeed" class="alerts-feed"></div>
+            </section>
+
+            <section class="panel panel-wide">
+                <div class="panel-heading">
+                    <div>
+                        <p class="panel-kicker">Watchlist canvas</p>
+                        <h2>Tracked Creator Grid</h2>
+                        <p>Focus, remove, and inspect creators across the whole watchlist without leaving the page.</p>
+                    </div>
+                </div>
+                <div id="trackedGrid" class="tracked-grid"></div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/js/app.js" defer></script>
+</body>
+</html>
