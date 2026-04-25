@@ -19,6 +19,23 @@
     <div class="app-shell">
         <section id="systemBanner" class="system-banner hidden" aria-live="polite"></section>
 
+        <aside class="command-rail" aria-label="Command index">
+            <div class="rail-seal">
+                <span>KC</span>
+                <strong>LIVE</strong>
+            </div>
+            <nav class="rail-nav">
+                <a href="#overview-zone">Overview</a>
+                <a href="#operations-zone">Ops</a>
+                <a href="#analysis-zone">Analysis</a>
+                <a href="#archive-zone">Archive</a>
+            </nav>
+            <div class="rail-readout" aria-hidden="true">
+                <span>BUS</span>
+                <i></i><i></i><i></i><i></i>
+            </div>
+        </aside>
+
         <section class="command-topbar" aria-label="Command center status">
             <div class="command-id">
                 <span>KC-LIVE-CHECKER</span>
@@ -36,7 +53,13 @@
             </div>
         </section>
 
-        <section class="mission-strip" aria-label="System overview">
+        <section class="raw-index-strip" aria-label="System index">
+            <span>Index / live telemetry / forecast surface / embedded watch / event wire</span>
+            <span>Operator view: no decorative shell, only signal density</span>
+            <span>Local command host: 127.0.0.1:5050</span>
+        </section>
+
+        <section id="overview-zone" class="mission-strip" aria-label="System overview">
             <article class="mission-card mission-card-primary">
                 <span class="mission-label">System mode</span>
                 <strong id="missionMode">Connecting</strong>
@@ -128,7 +151,13 @@
             </div>
         </header>
 
-        <section class="kpi-grid">
+        <section class="section-divider">
+            <span>01</span>
+            <strong>Control Overview</strong>
+            <p>Fast command summary before entering detailed modules.</p>
+        </section>
+
+        <section class="kpi-grid" aria-label="Key performance indicators">
             <article class="kpi-card accent-card">
                 <div class="kpi-head">
                     <span>Predicted Peak</span>
@@ -185,7 +214,13 @@
         </section>
 
         <main class="dashboard-grid">
-            <section class="panel forecast-panel">
+            <section id="operations-zone" class="section-divider section-divider-wide">
+                <span>02</span>
+                <strong>Live Operations</strong>
+                <p>Forecast, player, and focused creator brief grouped together for active monitoring.</p>
+            </section>
+
+            <section id="forecast-module" class="panel forecast-panel">
                 <div class="panel-heading">
                     <div>
                         <p class="panel-kicker">Forecast surface</p>
@@ -203,7 +238,7 @@
                 </div>
             </section>
 
-            <section class="panel stream-panel">
+            <section id="watch-module" class="panel stream-panel">
                 <div class="panel-heading">
                     <div>
                         <p class="panel-kicker">Embedded view</p>
@@ -225,7 +260,7 @@
                 <p id="playerMeta" class="player-meta">The player uses Twitch's official embed and follows the current host domain automatically.</p>
             </section>
 
-            <section class="panel profile-panel">
+            <section id="brief-module" class="panel profile-panel">
                 <div class="panel-heading">
                     <div>
                         <p class="panel-kicker">Focused brief</p>
@@ -273,7 +308,13 @@
                 </div>
             </section>
 
-            <section class="panel">
+            <section id="analysis-zone" class="section-divider section-divider-wide">
+                <span>03</span>
+                <strong>Analysis Stack</strong>
+                <p>Comparative rankings, cohort concentration, and category behavior.</p>
+            </section>
+
+            <section id="leaderboard-module" class="panel">
                 <div class="panel-heading">
                     <div>
                         <p class="panel-kicker">Competitive stack</p>
@@ -284,7 +325,7 @@
                 <div id="leaderboardList" class="leaderboard-grid"></div>
             </section>
 
-            <section class="panel">
+            <section id="cohort-module" class="panel">
                 <div class="panel-heading">
                     <div>
                         <p class="panel-kicker">Cohort read</p>
@@ -295,7 +336,7 @@
                 <div id="groupSummary" class="stack-list"></div>
             </section>
 
-            <section class="panel">
+            <section id="taxonomy-module" class="panel">
                 <div class="panel-heading">
                     <div>
                         <p class="panel-kicker">Taxonomy view</p>
@@ -306,7 +347,13 @@
                 <div id="categoryMix" class="bars-list"></div>
             </section>
 
-            <section class="panel panel-wide">
+            <section id="archive-zone" class="section-divider section-divider-wide">
+                <span>04</span>
+                <strong>Archive + Watchlist</strong>
+                <p>Historical records, event wire, and creator administration.</p>
+            </section>
+
+            <section id="session-module" class="panel panel-wide">
                 <div class="panel-heading">
                     <div>
                         <p class="panel-kicker">Session archive</p>
@@ -317,7 +364,7 @@
                 <div id="sessionList" class="session-list"></div>
             </section>
 
-            <section class="panel panel-wide">
+            <section id="wire-module" class="panel panel-wide">
                 <div class="panel-heading">
                     <div>
                         <p class="panel-kicker">Event wire</p>
@@ -328,7 +375,7 @@
                 <div id="alertsFeed" class="alerts-feed"></div>
             </section>
 
-            <section class="panel panel-wide">
+            <section id="creator-module" class="panel panel-wide">
                 <div class="panel-heading">
                     <div>
                         <p class="panel-kicker">Watchlist canvas</p>
