@@ -2123,3 +2123,783 @@ dd {
         height: 350px;
     }
 }
+
+/* ============================================================
+   REFERENCE-INFORMED BRUTALIST PASS
+   More raw index, less chrome. Built from public web brutalism:
+   exposed links, hard sections, visible counting, dense records.
+   ============================================================ */
+
+:root {
+    --bg: #080807;
+    --bg-alt: #11100d;
+    --panel: #0b0b09;
+    --panel-strong: #f1ead7;
+    --panel-soft: #181711;
+    --ink: #f1ead7;
+    --ink-soft: #c5bca7;
+    --muted: #8d8472;
+    --line: #514b3d;
+    --line-strong: #f1ead7;
+    --accent: #f0ff00;
+    --accent-deep: #11100d;
+    --accent-cool: #00ffc2;
+    --accent-gold: #ff9d00;
+    --danger: #ff2b1f;
+    --success: #00ff77;
+}
+
+body {
+    background:
+        linear-gradient(90deg, rgba(241, 234, 215, 0.07) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(241, 234, 215, 0.05) 1px, transparent 1px),
+        repeating-linear-gradient(135deg, rgba(240, 255, 0, 0.035) 0 1px, transparent 1px 13px),
+        var(--bg);
+    background-size: 46px 46px, 46px 46px, auto, auto;
+}
+
+body::selection {
+    color: var(--bg);
+    background: var(--accent);
+}
+
+a {
+    color: inherit;
+}
+
+.app-shell {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 0.65rem;
+    align-items: start;
+}
+
+.app-shell > :not(.command-rail) {
+    grid-column: 2;
+}
+
+.command-rail {
+    position: sticky;
+    top: 0.65rem;
+    grid-column: 1;
+    grid-row: 1 / span 20;
+    border: 2px solid var(--line-strong);
+    background: var(--bg);
+    color: var(--ink);
+}
+
+.rail-seal {
+    min-height: 112px;
+    padding: 0.65rem;
+    border-bottom: 2px solid var(--line-strong);
+    background: var(--accent);
+    color: var(--bg);
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+}
+
+.rail-seal span,
+.rail-seal strong {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    line-height: 0.9;
+}
+
+.rail-nav {
+    display: grid;
+}
+
+.rail-nav a {
+    min-height: 74px;
+    display: grid;
+    place-items: center;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+    text-transform: uppercase;
+    writing-mode: vertical-rl;
+}
+
+.rail-nav a:hover,
+.rail-nav a:focus-visible {
+    color: var(--bg);
+    background: var(--ink);
+}
+
+.rail-readout {
+    padding: 0.65rem;
+}
+
+.rail-readout span {
+    display: block;
+    margin-bottom: 0.55rem;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 800;
+}
+
+.rail-readout i {
+    display: block;
+    height: 22px;
+    margin-top: 0.35rem;
+    border: 1px solid var(--line);
+    background: var(--panel-soft);
+}
+
+.rail-readout i:nth-child(even) {
+    background: var(--accent);
+}
+
+.raw-index-strip {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr auto;
+    border: 2px solid var(--line-strong);
+    border-top: 0;
+    background: var(--ink);
+    color: var(--bg);
+}
+
+.raw-index-strip span {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    padding: 0.55rem 0.7rem;
+    border-right: 2px solid var(--bg);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.section-divider {
+    display: grid;
+    grid-template-columns: 5rem minmax(180px, auto) minmax(0, 1fr);
+    align-items: stretch;
+    border: 2px solid var(--line-strong);
+    background: var(--bg);
+    color: var(--ink);
+}
+
+.section-divider-wide {
+    grid-column: 1 / -1;
+}
+
+.section-divider span,
+.section-divider strong,
+.section-divider p {
+    display: flex;
+    align-items: center;
+    margin: 0;
+    padding: 0.7rem 0.85rem;
+    border-right: 2px solid var(--line-strong);
+}
+
+.section-divider span {
+    justify-content: center;
+    background: var(--accent);
+    color: var(--bg);
+    font-family: var(--font-display);
+    font-size: 1.65rem;
+    line-height: 1;
+}
+
+.section-divider strong {
+    font-family: var(--font-display);
+    font-size: clamp(1.2rem, 2.2vw, 2rem);
+    line-height: 0.9;
+    text-transform: uppercase;
+}
+
+.section-divider p {
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.command-topbar,
+.mission-strip,
+.section-divider,
+.hero.panel,
+.kpi-grid,
+.dashboard-grid {
+    margin-top: 0;
+}
+
+.command-topbar,
+.mission-card,
+.panel,
+.system-banner,
+.kpi-card,
+.hero-stat,
+.search-results,
+.search-result,
+.pill,
+.panel-chip,
+.profile-card,
+.insight-box,
+.leaderboard-card,
+.bar-row,
+.session-row,
+.alert-row,
+.tracked-card {
+    border-width: 2px;
+}
+
+.command-id,
+.command-clock,
+.mission-card-primary,
+.kpi-card.accent-card,
+.button-primary,
+.eyebrow,
+.leaderboard-card h3 {
+    color: var(--bg);
+    background: var(--accent);
+}
+
+.command-strip span {
+    min-height: 58px;
+}
+
+.mission-strip {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 0.82fr;
+}
+
+.mission-card {
+    min-height: 118px;
+}
+
+.hero.panel {
+    grid-template-columns: minmax(0, 1fr) minmax(430px, 0.58fr);
+    min-height: 520px;
+}
+
+.hero-copy {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+h1 {
+    max-width: 9ch;
+    font-size: clamp(4rem, 12vw, 12rem);
+    line-height: 0.75;
+    letter-spacing: -0.025em;
+}
+
+.hero-text {
+    max-width: 72ch;
+    margin-top: 1rem;
+    padding-top: 0.8rem;
+    border-top: 2px solid var(--line);
+}
+
+.hero-tag-row {
+    padding-top: 0.9rem;
+}
+
+.hero-tag,
+.pill,
+.panel-chip,
+.group-chip,
+.button {
+    min-height: 32px;
+    padding: 0.35rem 0.55rem;
+}
+
+.authority-panel {
+    background: var(--ink);
+    color: var(--bg);
+}
+
+.authority-panel span {
+    color: var(--bg);
+}
+
+.authority-grid i {
+    border-color: var(--bg);
+    background: var(--bg);
+}
+
+.authority-grid i:nth-child(3n),
+.authority-grid i:nth-child(7) {
+    background: var(--danger);
+}
+
+.field input,
+.field select {
+    border-width: 2px;
+}
+
+.kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.kpi-card {
+    min-height: 142px;
+}
+
+.kpi-card strong {
+    margin-top: 0.8rem;
+    font-size: clamp(2rem, 5vw, 4.6rem);
+}
+
+.dashboard-grid {
+    counter-reset: module;
+    grid-template-columns: minmax(0, 1.12fr) minmax(360px, 0.88fr);
+    align-items: start;
+}
+
+.forecast-panel,
+.panel-wide {
+    grid-column: 1 / -1;
+}
+
+.stream-panel,
+.profile-panel,
+.panel:not(.panel-wide) {
+    min-width: 0;
+}
+
+.panel-heading {
+    position: relative;
+    min-height: 92px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1rem;
+    padding-left: 5.5rem;
+    background: var(--panel-strong);
+    color: var(--bg);
+    min-width: 0;
+}
+
+.panel-heading::before {
+    counter-increment: module;
+    content: "M-" counter(module, decimal-leading-zero);
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4.5rem;
+    display: grid;
+    place-items: center;
+    border-right: 2px solid var(--bg);
+    background: var(--accent);
+    color: var(--bg);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 900;
+    writing-mode: vertical-rl;
+}
+
+.panel-heading h2,
+.panel-kicker,
+.panel-heading p {
+    color: var(--bg);
+}
+
+.panel-heading h2 {
+    max-width: none;
+    font-size: clamp(1.55rem, 3.4vw, 3.2rem);
+    overflow-wrap: anywhere;
+}
+
+.panel-heading p {
+    text-align: left;
+    opacity: 0.72;
+}
+
+.chart-wrap {
+    height: 540px;
+    border-top: 0;
+    background:
+        linear-gradient(90deg, rgba(241, 234, 215, 0.08) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(241, 234, 215, 0.06) 1px, transparent 1px),
+        var(--bg);
+    background-size: 28px 28px;
+}
+
+.profile-title,
+.profile-description,
+.chip-row,
+.profile-topline,
+.profile-metrics,
+.insight-box,
+.leaderboard-card,
+.bar-row,
+.session-row,
+.alert-row,
+.tracked-card {
+    background: var(--panel);
+}
+
+.profile-metrics div,
+.metric-row,
+.stack-row,
+.tracked-meta,
+.tracked-stats {
+    border-color: var(--line);
+}
+
+.leaderboard-card h3 {
+    border: 2px solid var(--line-strong);
+}
+
+.tracked-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+}
+
+.tracked-card {
+    padding: 0;
+}
+
+.tracked-topline,
+.tracked-meta,
+.tracked-stats,
+.tracked-actions {
+    padding: 0.8rem;
+}
+
+.tracked-topline {
+    border-bottom: 1px solid var(--line);
+}
+
+.tracked-avatar {
+    border-width: 2px;
+}
+
+.tracked-button {
+    border-radius: 0;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+}
+
+.bar-track,
+.stack-track {
+    height: 1.05rem;
+}
+
+.bar-track span,
+.stack-track span {
+    background: repeating-linear-gradient(
+        90deg,
+        var(--accent) 0 10px,
+        var(--accent-cool) 10px 12px
+    );
+}
+
+.player-shell {
+    min-height: 390px;
+}
+
+.session-list,
+.alerts-feed,
+.bars-list,
+.leaderboard-grid,
+.tracked-grid {
+    background:
+        repeating-linear-gradient(0deg, transparent 0 35px, rgba(241, 234, 215, 0.035) 35px 36px),
+        var(--bg);
+}
+
+@media (max-width: 1320px) {
+    .app-shell {
+        grid-template-columns: 76px minmax(0, 1fr);
+    }
+
+    .hero.panel,
+    .dashboard-grid,
+    .command-topbar {
+        grid-template-columns: 1fr;
+    }
+
+    .forecast-panel,
+    .stream-panel,
+    .profile-panel,
+    .panel:not(.panel-wide),
+    .panel-wide {
+        grid-column: auto;
+    }
+
+    .mission-strip,
+    .kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .raw-index-strip {
+        grid-template-columns: 1fr;
+    }
+
+    .raw-index-strip span {
+        border-right: 0;
+        border-bottom: 1px solid var(--bg);
+    }
+
+    .section-divider {
+        grid-template-columns: 4.5rem 1fr;
+    }
+
+    .section-divider p {
+        grid-column: 1 / -1;
+        border-top: 1px solid var(--line);
+        border-right: 0;
+    }
+}
+
+@media (max-width: 860px) {
+    .app-shell {
+        display: block;
+    }
+
+    .command-rail {
+        position: static;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        margin-bottom: 0.65rem;
+    }
+
+    .rail-seal,
+    .rail-nav a {
+        min-height: 54px;
+        writing-mode: horizontal-tb;
+    }
+
+    .rail-nav {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .rail-readout {
+        display: none;
+    }
+
+    .mission-strip,
+    .kpi-grid,
+    .dashboard-grid,
+    .hero.panel,
+    .hero-controls,
+    .hero-stat-grid,
+    .profile-metrics,
+    .tracked-grid,
+    .leaderboard-grid,
+    .command-strip {
+        grid-template-columns: 1fr;
+    }
+
+    .section-divider {
+        grid-template-columns: 1fr;
+    }
+
+    .section-divider span,
+    .section-divider strong,
+    .section-divider p {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+    }
+
+    .hero.panel,
+    .hero-copy,
+    .hero-side,
+    .authority-panel,
+    .hero-controls,
+    .search-shell,
+    .hero-stat-grid,
+    .hero-stat,
+    .field,
+    .field input,
+    .field select,
+    .button {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    h1 {
+        max-width: 100%;
+        font-size: clamp(2.85rem, 18vw, 5.3rem);
+        overflow-wrap: anywhere;
+    }
+
+    .panel-heading {
+        grid-template-columns: 1fr;
+        padding-left: 4.5rem;
+    }
+
+    .forecast-panel,
+    .stream-panel,
+    .profile-panel,
+    .panel:not(.panel-wide),
+    .panel-wide,
+    .section-divider-wide {
+        grid-column: auto !important;
+    }
+
+    .dashboard-grid > .panel,
+    .dashboard-grid > .section-divider,
+    .dashboard-grid > .panel-wide,
+    .dashboard-grid > .forecast-panel,
+    .dashboard-grid > .stream-panel,
+    .dashboard-grid > .profile-panel {
+        grid-column: 1 / -1 !important;
+    }
+
+    .profile-metrics div,
+    .tracked-card,
+    .tracked-topline,
+    .tracked-identity,
+    .tracked-identity > div {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .chart-wrap {
+        height: 350px;
+    }
+}
+
+/* Organized motion pass: mechanical boot-up, not soft app animation. */
+@keyframes bootScan {
+    0% {
+        opacity: 0;
+        transform: translateY(10px);
+        filter: contrast(1.4);
+    }
+    55% {
+        opacity: 1;
+        transform: translateY(0);
+        filter: contrast(1.1);
+    }
+    100% {
+        opacity: 1;
+        filter: none;
+    }
+}
+
+@keyframes railPulse {
+    0%, 100% {
+        background: var(--panel-soft);
+    }
+    50% {
+        background: var(--accent);
+    }
+}
+
+@keyframes scanLine {
+    0% {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    18% {
+        opacity: 0.7;
+    }
+    100% {
+        transform: translateY(1200%);
+        opacity: 0;
+    }
+}
+
+.command-topbar,
+.raw-index-strip,
+.mission-strip,
+.section-divider,
+.hero.panel,
+.kpi-card,
+.panel {
+    animation: bootScan 420ms steps(5, end) both;
+}
+
+.raw-index-strip { animation-delay: 35ms; }
+.mission-strip { animation-delay: 70ms; }
+.section-divider { animation-delay: 105ms; }
+.hero.panel { animation-delay: 140ms; }
+.kpi-card:nth-child(1) { animation-delay: 175ms; }
+.kpi-card:nth-child(2) { animation-delay: 205ms; }
+.kpi-card:nth-child(3) { animation-delay: 235ms; }
+.kpi-card:nth-child(4) { animation-delay: 265ms; }
+.kpi-card:nth-child(5) { animation-delay: 295ms; }
+.kpi-card:nth-child(6) { animation-delay: 325ms; }
+.dashboard-grid .section-divider { animation-delay: 180ms; }
+.panel { animation-delay: 230ms; }
+
+.rail-readout i {
+    animation: railPulse 2.2s steps(2, end) infinite;
+}
+
+.rail-readout i:nth-child(3) { animation-delay: 300ms; }
+.rail-readout i:nth-child(4) { animation-delay: 600ms; }
+.rail-readout i:nth-child(5) { animation-delay: 900ms; }
+
+.chart-wrap,
+.player-shell,
+.tracked-grid,
+.session-list,
+.alerts-feed,
+.leaderboard-grid {
+    position: relative;
+    overflow: hidden;
+}
+
+.chart-wrap::after,
+.player-shell::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 18px rgba(240, 255, 0, 0.55);
+    animation: scanLine 4.8s linear infinite;
+    pointer-events: none;
+}
+
+.button,
+.rail-nav a,
+.tracked-card,
+.leaderboard-card,
+.bar-row,
+.session-row,
+.alert-row {
+    transition:
+        background 120ms steps(2, end),
+        color 120ms steps(2, end),
+        outline-color 120ms steps(2, end),
+        transform 120ms steps(2, end);
+}
+
+.button:active,
+.rail-nav a:active {
+    transform: translate(2px, 2px);
+}
+
+.tracked-card:hover,
+.leaderboard-card:hover,
+.bar-row:hover,
+.session-row:hover,
+.alert-row:hover {
+    background: #12120e;
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .command-topbar,
+    .raw-index-strip,
+    .mission-strip,
+    .section-divider,
+    .hero.panel,
+    .kpi-card,
+    .panel,
+    .rail-readout i,
+    .chart-wrap::after,
+    .player-shell::after {
+        animation: none !important;
+    }
+}
