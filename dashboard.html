@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audience Signal Lab</title>
-    <meta name="description" content="Audience Signal Lab tracks Twitch creators, forecasts audience movement, detects anomalies, and now lets you watch streams directly inside the app.">
+    <title>Audience Command Center</title>
+    <meta name="description" content="A command-center Twitch intelligence dashboard for live creator telemetry, forecast diagnostics, anomaly detection, and embedded monitoring.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
@@ -18,6 +18,23 @@
 
     <div class="app-shell">
         <section id="systemBanner" class="system-banner hidden" aria-live="polite"></section>
+
+        <section class="command-topbar" aria-label="Command center status">
+            <div class="command-id">
+                <span>KC-LIVE-CHECKER</span>
+                <strong>Creator Telemetry Command</strong>
+            </div>
+            <div class="command-strip" aria-hidden="true">
+                <span>OPS: Armed</span>
+                <span>Data Bus: Polling</span>
+                <span>Forecast: Active</span>
+                <span>Embeds: Twitch</span>
+            </div>
+            <div class="command-clock">
+                <span>Posture</span>
+                <strong>Watch</strong>
+            </div>
+        </section>
 
         <section class="mission-strip" aria-label="System overview">
             <article class="mission-card mission-card-primary">
@@ -47,21 +64,29 @@
 
         <header class="hero panel">
             <div class="hero-copy">
-                <p class="eyebrow">Audience Signal Lab</p>
-                <h1 id="appTitle">Audience Signal Lab</h1>
+                <p class="eyebrow">Audience Command Authority</p>
+                <h1 id="appTitle">Twitch Live Command</h1>
                 <p class="hero-text">
-                    Track live Twitch momentum, estimate short-horizon audience peaks, manage a watchlist,
-                    and watch the selected channel directly inside the dashboard.
+                    A hardened live-stream control room for tracking creator status, audience surges,
+                    category movement, forecast volatility, anomaly risk, and embedded watch operations.
                 </p>
                 <div class="hero-tag-row">
-                    <span class="hero-tag">Cached live telemetry</span>
+                    <span class="hero-tag">Cached telemetry</span>
+                    <span class="hero-tag">Surge radar</span>
                     <span class="hero-tag">Forecast diagnostics</span>
-                    <span class="hero-tag">Embedded stream player</span>
-                    <span class="hero-tag">Portfolio-grade UX</span>
+                    <span class="hero-tag">Embedded monitoring</span>
                 </div>
             </div>
 
             <div class="hero-side">
+                <div class="authority-panel" aria-hidden="true">
+                    <span>Signal Board</span>
+                    <div class="authority-grid">
+                        <i></i><i></i><i></i><i></i><i></i><i></i>
+                        <i></i><i></i><i></i><i></i><i></i><i></i>
+                    </div>
+                </div>
+
                 <div class="hero-controls">
                     <label class="field">
                         <span>Focus streamer</span>

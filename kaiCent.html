@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Audience Signal Lab</title>
+  <title>Audience Command Center</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/kaiCenat.css">
 </head>
 <body>
@@ -17,23 +17,48 @@
   <div class="page-shell">
     <section id="systemBanner" class="system-banner hidden" aria-live="polite"></section>
 
+    <section class="command-topbar" aria-label="Command center status">
+      <div class="command-id">
+        <span>KC-LIVE-CHECKER</span>
+        <strong>Creator Telemetry Command</strong>
+      </div>
+      <div class="command-strip" aria-hidden="true">
+        <span>OPS: ARMED</span>
+        <span>DATA BUS: POLLING</span>
+        <span>PUBLIC API: TWITCH</span>
+        <span>ALERT ROUTER: LOCAL</span>
+      </div>
+      <div class="command-clock">
+        <span>Threat posture</span>
+        <strong>Watch</strong>
+      </div>
+    </section>
+
     <header class="hero panel-shell">
       <div class="hero-copy">
-        <p class="eyebrow">Audience Signal Lab</p>
-        <h1 id="appTitle">Twitch Live Radar</h1>
+        <p class="eyebrow">Audience Command Authority</p>
+        <h1 id="appTitle">Twitch Live Command</h1>
         <p class="hero-text">
-          A real-time creator intelligence platform designed to study audience momentum, session behavior,
-          competitive category dynamics, and alert-worthy inflection points across livestream ecosystems.
+          A hardened live-stream control room for tracking creator status, audience surges,
+          category movement, session behavior, and alert-worthy inflection points across the watchlist.
         </p>
         <div class="hero-tag-row">
           <span class="hero-tag">Realtime telemetry</span>
-          <span class="hero-tag">Comparative analytics</span>
-          <span class="hero-tag">Cohort segmentation</span>
-          <span class="hero-tag">Event detection</span>
+          <span class="hero-tag">Viewer surge radar</span>
+          <span class="hero-tag">Cohort command map</span>
+          <span class="hero-tag">Event escalation</span>
         </div>
       </div>
 
       <aside class="hero-aside">
+        <div class="authority-panel" aria-hidden="true">
+          <span>Signal Board</span>
+          <div class="authority-grid">
+            <i></i><i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+        </div>
+
         <div class="status-block">
           <span class="label">System profile</span>
           <strong id="systemMode">Telemetry standby</strong>

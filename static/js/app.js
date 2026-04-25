@@ -72,9 +72,9 @@ const elements = {
 const chartAvailable = typeof window.Chart !== "undefined";
 
 if (chartAvailable) {
-    Chart.defaults.color = "#d6e2f0";
+    Chart.defaults.color = "#c5bdab";
     Chart.defaults.font.family = "IBM Plex Mono";
-    Chart.defaults.borderColor = "rgba(164, 188, 212, 0.14)";
+    Chart.defaults.borderColor = "rgba(244, 241, 232, 0.16)";
 }
 
 function createElement(tag, options = {}) {
@@ -681,8 +681,8 @@ function renderChart() {
 
     const ctx = elements.mainChart.getContext("2d");
     const gradient = ctx.createLinearGradient(0, 0, 0, 320);
-    gradient.addColorStop(0, "rgba(105, 231, 201, 0.38)");
-    gradient.addColorStop(1, "rgba(105, 231, 201, 0)");
+    gradient.addColorStop(0, "rgba(215, 255, 56, 0.34)");
+    gradient.addColorStop(1, "rgba(215, 255, 56, 0)");
 
     if (state.chart) {
         state.chart.data.labels = labels;
@@ -702,7 +702,7 @@ function renderChart() {
                 {
                     label: "Actual",
                     data: actual,
-                    borderColor: "#69e7c9",
+                    borderColor: "#d7ff38",
                     backgroundColor: gradient,
                     fill: true,
                     tension: 0.32,
@@ -713,7 +713,7 @@ function renderChart() {
                 {
                     label: "Forecast",
                     data: forecast,
-                    borderColor: "#8dc5ff",
+                    borderColor: "#6fffd2",
                     borderWidth: 3,
                     borderDash: [8, 8],
                     pointRadius: 0,
@@ -722,7 +722,7 @@ function renderChart() {
                 {
                     label: "Upper bound",
                     data: upper,
-                    borderColor: "rgba(240, 203, 130, 0.65)",
+                    borderColor: "rgba(255, 176, 0, 0.75)",
                     borderWidth: 1.5,
                     pointRadius: 0,
                     tension: 0.28,
@@ -730,7 +730,7 @@ function renderChart() {
                 {
                     label: "Lower bound",
                     data: lower,
-                    borderColor: "rgba(240, 203, 130, 0.25)",
+                    borderColor: "rgba(255, 176, 0, 0.28)",
                     borderWidth: 1.5,
                     pointRadius: 0,
                     tension: 0.28,
@@ -752,17 +752,17 @@ function renderChart() {
                     },
                 },
                 tooltip: {
-                    backgroundColor: "rgba(6, 17, 31, 0.96)",
-                    titleColor: "#f5f8fc",
-                    bodyColor: "#d6e2f0",
-                    borderColor: "rgba(164, 188, 212, 0.16)",
-                    borderWidth: 1,
+                    backgroundColor: "#090908",
+                    titleColor: "#f4f1e8",
+                    bodyColor: "#c5bdab",
+                    borderColor: "#f4f1e8",
+                    borderWidth: 2,
                 },
             },
             scales: {
                 x: {
                     grid: {
-                        color: "rgba(164, 188, 212, 0.08)",
+                        color: "rgba(244, 241, 232, 0.12)",
                     },
                     ticks: {
                         maxTicksLimit: 8,
@@ -771,7 +771,7 @@ function renderChart() {
                 y: {
                     beginAtZero: true,
                     grid: {
-                        color: "rgba(164, 188, 212, 0.08)",
+                        color: "rgba(244, 241, 232, 0.12)",
                     },
                 },
             },

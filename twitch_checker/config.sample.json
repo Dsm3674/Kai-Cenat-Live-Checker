@@ -28,5 +28,5 @@
   "snapshot_limit": 72,
   "event_limit": 30,
   "alert_thresholds": [1000, 5000, 10000, 25000, 50000, 100000],
-  "frontend_title": "Twitch Live Radar"
+  "frontend_title": "Twitch Live Command"
 }

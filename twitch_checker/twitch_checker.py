@@ -275,8 +275,8 @@ def load_config() -> AppConfig:
             os.getenv("ALERT_THRESHOLDS", file_config.get("alert_thresholds")),
             DEFAULT_ALERT_THRESHOLDS,
         ),
-        frontend_title=os.getenv("FRONTEND_TITLE", file_config.get("frontend_title", "Audience Signal Lab")).strip()
-        or "Audience Signal Lab",
+        frontend_title=os.getenv("FRONTEND_TITLE", file_config.get("frontend_title", "Twitch Live Command")).strip()
+        or "Twitch Live Command",
         flask_secret_key=os.getenv("FLASK_SECRET_KEY", secrets.token_urlsafe(32)),
     )
 
