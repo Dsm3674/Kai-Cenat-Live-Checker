@@ -1,4 +1,5 @@
 const state = {
+    anomalySummary: null,
     chart: null,
     command: null,
     config: null,
@@ -16,6 +17,8 @@ const state = {
 
 const elements = {
     alertsFeed: document.getElementById("alertsFeed"),
+    anomalyCount: document.getElementById("anomalyCount"),
+    anomalySummary: document.getElementById("anomalySummary"),
     appTitle: document.getElementById("appTitle"),
     categoryMix: document.getElementById("categoryMix"),
     chartState: document.getElementById("chartState"),
@@ -348,6 +351,16 @@ function buildFallbackCommandCenter() {
     };
 }
 
+function buildFallbackAnomalySummary() {
+    return {
+        generated_at: new Date().toISOString(),
+        tracked: state.dashboard?.summary?.tracked || 0,
+        active_anomalies: [],
+        recent_events: [],
+        counts: { high: 0, medium: 0, watch: 0 },
+    };
+}
+
 function getTrendClass(trend) {
     if (trend === "growing" || trend === "high") {
         return "growing";
@@ -489,6 +502,17 @@ function renderEventCounts() {
     }
 }
 
+function renderAnomalySummary() {
+    const anomalySummary = state.anomalySummary || buildFallbackAnomalySummary();
+    elements.anomalyCount.textContent = String(anomalySummary.active_anomalies?.length || 0);
+    const items = (anomalySummary.active_anomalies || []).map((item) => ({
+        name: item.display_name || item.login,
+        status: item.severity,
+        detail: item.reason,
+    }));
+    renderBriefingList(elements.anomalySummary, items, "No active anomalies are being flagged across the watchlist.");
+}
+
 function renderCommandCenter() {
     const command = state.command || buildFallbackCommandCenter();
     const checks = command.system_checks || [];
@@ -529,6 +553,7 @@ function renderCommandCenter() {
 
     renderBriefingList(elements.systemChecks, checks, "System checks are still calibrating.");
     renderBriefingList(elements.riskRegister, risks, "No immediate risks are active across the watchlist.");
+    renderAnomalySummary();
     renderBriefingList(elements.zoneDigest, zones, "Zone summaries will appear after the dashboard initializes.");
     renderEventCounts();
     renderWatchlistPulse();
@@ -1129,6 +1154,7 @@ async function refreshDashboard({ force = false } = {}) {
     state.health = workspace.health || state.health;
     state.dashboard = workspace.dashboard?.streamers?.length ? workspace.dashboard : buildFallbackDashboard();
     state.command = workspace.command_center || buildFallbackCommandCenter();
+    state.anomalySummary = workspace.anomaly_summary || buildFallbackAnomalySummary();
     state.integration = workspace.integration || null;
 
     if (!state.health?.configured) {

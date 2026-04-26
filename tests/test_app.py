@@ -61,8 +61,24 @@ SAMPLE_WORKSPACE = {
     "health": {"ok": True, "configured": True, "error": None, "generated_at": "2026-04-06T12:00:00+00:00", "cache_age_seconds": 3},
     "dashboard": SAMPLE_DASHBOARD,
     "command_center": SAMPLE_COMMAND_CENTER,
+    "anomaly_summary": {"generated_at": "2026-04-06T12:00:00+00:00", "tracked": 1, "active_anomalies": [], "recent_events": [], "counts": {"high": 0, "medium": 0, "watch": 0}},
     "selected_streamer": SAMPLE_DASHBOARD["streamers"][0],
     "integration": {"recommended_refresh_seconds": 60, "supports_search": True, "supports_forecast": True, "primary_routes": {"workspace": "/api/workspace"}},
+}
+
+SAMPLE_ANOMALIES = {
+    "generated_at": "2026-04-06T12:00:00+00:00",
+    "tracked": 1,
+    "active_anomalies": [{"login": "kaicenat", "display_name": "Kai Cenat", "severity": "high", "reason": "Trend score is elevated at 180.", "viewer_count": 12345, "trend_score": 180, "consistency_score": 72}],
+    "recent_events": [],
+    "counts": {"high": 1, "medium": 0, "watch": 0},
+}
+
+SAMPLE_COMPARE_SUMMARY = {
+    "generated_at": "2026-04-06T12:00:00+00:00",
+    "streamers": [{"login": "kaicenat", "display_name": "Kai Cenat", "is_live": True, "viewer_count": 12345, "session_count": 4, "avg_duration_minutes": 160, "best_peak_viewers": 20000, "avg_peak_viewers": 15000, "trend_score": 110, "top_category": "Just Chatting", "consistency_score": 72}],
+    "leaders": {"live_viewers": {"login": "kaicenat"}, "peak_viewers": {"login": "kaicenat"}, "consistency": {"login": "kaicenat"}, "momentum": {"login": "kaicenat"}},
+    "summary": {"tracked": 1, "live": 1, "avg_trend_score": 110, "avg_consistency_score": 72},
 }
 
 
@@ -113,6 +129,39 @@ class AppRoutesTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(payload["payload_version"], "workspace.v1")
             self.assertEqual(payload["selected_streamer"]["login"], "kaicenat")
+
+    def test_workspace_route_falls_back_without_credentials(self) -> None:
+        app = create_app()
+        client = app.test_client()
+
+        response = client.get("/api/workspace")
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["payload_version"], "workspace.v1")
+        self.assertFalse(payload["health"]["configured"])
+        self.assertIn("anomaly_summary", payload)
+        self.assertEqual(payload["anomaly_summary"]["counts"]["high"], 0)
+
+    def test_analysis_and_schema_routes(self) -> None:
+        with patch.object(TwitchService, "get_anomaly_summary", return_value=SAMPLE_ANOMALIES), patch.object(
+            TwitchService, "get_compare_summary", return_value=SAMPLE_COMPARE_SUMMARY
+        ), patch.object(
+            TwitchService, "get_api_schema", return_value={"openapi": "3.0.0", "info": {"title": "Audience Operations API"}}
+        ):
+            app = create_app()
+            client = app.test_client()
+
+            anomalies_response = client.get("/api/anomalies")
+            compare_response = client.get("/api/compare/summary?logins=kaicenat")
+            schema_response = client.get("/api/openapi.json")
+
+            self.assertEqual(anomalies_response.status_code, 200)
+            self.assertEqual(anomalies_response.get_json()["counts"]["high"], 1)
+            self.assertEqual(compare_response.status_code, 200)
+            self.assertEqual(compare_response.get_json()["leaders"]["momentum"]["login"], "kaicenat")
+            self.assertEqual(schema_response.status_code, 200)
+            self.assertEqual(schema_response.get_json()["openapi"], "3.0.0")
 
     def test_search_and_watchlist_routes(self) -> None:
         with patch.object(

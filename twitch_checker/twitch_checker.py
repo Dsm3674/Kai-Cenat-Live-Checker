@@ -563,6 +563,16 @@ class TwitchService:
             return None
         return int(max(time.time() - self._dashboard_cached_at, 0))
 
+    def cache_status(self) -> dict[str, Any]:
+        age_seconds = self.cache_age_seconds()
+        ttl_seconds = max(min(self.config.check_interval, 120), 15)
+        return {
+            "age_seconds": age_seconds,
+            "ttl_seconds": ttl_seconds,
+            "is_warm": self._dashboard_cache is not None,
+            "is_fresh": age_seconds is not None and age_seconds < ttl_seconds,
+        }
+
     def invalidate_cache(self) -> None:
         with self._cache_lock:
             self._dashboard_cache = None
@@ -636,13 +646,158 @@ class TwitchService:
         dashboard = self.get_dashboard()
         return self._build_command_center(dashboard)
 
+    def get_anomaly_summary(self, logins: list[str] | None = None) -> dict[str, Any]:
+        error = self.config_error()
+        if error:
+            tracked_logins = parse_streamers(logins or self.config.streamers)
+            return {
+                "generated_at": utc_now_iso(),
+                "tracked": len(tracked_logins),
+                "active_anomalies": [],
+                "recent_events": [],
+                "counts": {"high": 0, "medium": 0, "watch": 0},
+            }
+
+        dashboard = self.get_dashboard(logins)
+        alerts = dashboard.get("alerts", [])
+        streamers = dashboard.get("streamers", [])
+
+        anomalies: list[dict[str, Any]] = []
+        for streamer in streamers:
+            analytics = streamer.get("analytics", {})
+            trend_score = analytics.get("trend_score", 0)
+            consistency = analytics.get("consistency_score", 0)
+            best_peak = analytics.get("best_peak_viewers", 0)
+            current = streamer.get("viewer_count", 0)
+            live = streamer.get("is_live", False)
+
+            severity = None
+            reason = None
+            if live and trend_score >= 150:
+                severity = "high"
+                reason = f"Trend score is elevated at {trend_score}."
+            elif live and best_peak and current >= int(best_peak * 0.9):
+                severity = "medium"
+                reason = f"Current viewers are near the historical peak of {best_peak:,}."
+            elif not live and consistency >= 75:
+                severity = "watch"
+                reason = f"High-consistency channel is currently offline after {analytics.get('session_count', 0)} tracked sessions."
+
+            if severity and reason:
+                anomalies.append(
+                    {
+                        "login": streamer["login"],
+                        "display_name": streamer["display_name"],
+                        "severity": severity,
+                        "reason": reason,
+                        "viewer_count": current,
+                        "trend_score": trend_score,
+                        "consistency_score": consistency,
+                    }
+                )
+
+        return {
+            "generated_at": dashboard["generated_at"],
+            "tracked": dashboard.get("summary", {}).get("tracked", 0),
+            "active_anomalies": anomalies[:8],
+            "recent_events": alerts[:8],
+            "counts": {
+                "high": sum(1 for item in anomalies if item["severity"] == "high"),
+                "medium": sum(1 for item in anomalies if item["severity"] == "medium"),
+                "watch": sum(1 for item in anomalies if item["severity"] == "watch"),
+            },
+        }
+
+    def get_compare_summary(self, logins: list[str]) -> dict[str, Any]:
+        compared = self.compare_streamers(logins)
+        streamers = compared.get("streamers", [])
+        if not streamers:
+            return {
+                "generated_at": compared["generated_at"],
+                "streamers": [],
+                "leaders": {},
+                "summary": {"tracked": 0, "live": 0, "avg_trend_score": 0},
+            }
+
+        leaders = {
+            "live_viewers": max(streamers, key=lambda item: item.get("viewer_count", 0)),
+            "peak_viewers": max(streamers, key=lambda item: item.get("best_peak_viewers", 0)),
+            "consistency": max(streamers, key=lambda item: item.get("consistency_score", 0)),
+            "momentum": max(streamers, key=lambda item: item.get("trend_score", 0)),
+        }
+        return {
+            "generated_at": compared["generated_at"],
+            "streamers": streamers,
+            "leaders": leaders,
+            "summary": {
+                "tracked": len(streamers),
+                "live": sum(1 for item in streamers if item.get("is_live")),
+                "avg_trend_score": round(sum(item.get("trend_score", 0) for item in streamers) / len(streamers)),
+                "avg_consistency_score": round(sum(item.get("consistency_score", 0) for item in streamers) / len(streamers)),
+            },
+        }
+
+    def get_api_schema(self) -> dict[str, Any]:
+        return {
+            "openapi": "3.0.0",
+            "info": {
+                "title": "Audience Operations API",
+                "version": "1.1.0",
+                "description": "Backend API for Twitch watchlist analytics, command-center summaries, and frontend workspace integration.",
+            },
+            "servers": [{"url": "/"}],
+            "paths": {
+                "/api/health": {"get": {"summary": "Health and cache status"}},
+                "/api/config": {"get": {"summary": "Frontend/runtime configuration"}},
+                "/api/dashboard": {"get": {"summary": "Full dashboard payload"}},
+                "/api/command-center": {"get": {"summary": "Derived operational posture and summaries"}},
+                "/api/workspace": {"get": {"summary": "Bundled frontend bootstrap payload"}},
+                "/api/anomalies": {"get": {"summary": "Derived anomaly and recent event summary"}},
+                "/api/compare/summary": {"get": {"summary": "Comparison summary and leaders for selected streamers"}},
+                "/api/openapi.json": {"get": {"summary": "Machine-readable API schema"}},
+            },
+            "components": {
+                "schemas": {
+                    "WorkspaceBundle": {
+                        "type": "object",
+                        "properties": {
+                            "payload_version": {"type": "string"},
+                            "config": {"type": "object"},
+                            "health": {"type": "object"},
+                            "dashboard": {"type": "object"},
+                            "command_center": {"type": "object"},
+                            "selected_streamer": {"type": ["object", "null"]},
+                            "integration": {"type": "object"},
+                        },
+                    },
+                    "CommandCenter": {
+                        "type": "object",
+                        "properties": {
+                            "posture": {"type": "string"},
+                            "posture_score": {"type": "number"},
+                            "operation_brief": {"type": "string"},
+                            "system_checks": {"type": "array"},
+                            "risk_register": {"type": "array"},
+                            "zone_status": {"type": "array"},
+                            "watchlist_pulse": {"type": "array"},
+                            "event_counts": {"type": "object"},
+                        },
+                    },
+                }
+            },
+        }
+
     def get_workspace_bundle(self, selected_login: str | None = None, force_refresh: bool = False) -> dict[str, Any]:
+        cache = self.cache_status()
         health = {
             "ok": True,
             "configured": self.config_error() is None,
             "error": self.config_error(),
             "generated_at": utc_now_iso(),
             "cache_age_seconds": self.cache_age_seconds(),
+            "cache_ttl_seconds": cache["ttl_seconds"],
+            "cache_is_warm": cache["is_warm"],
+            "cache_is_fresh": cache["is_fresh"],
         }
 
         if health["configured"]:
@@ -686,15 +841,21 @@ class TwitchService:
             "health": health,
             "dashboard": dashboard,
             "command_center": command_center,
+            "anomaly_summary": self.get_anomaly_summary(self.config.streamers if health["configured"] else None),
             "selected_streamer": selected_stream,
             "integration": {
                 "recommended_refresh_seconds": self.config.check_interval,
                 "supports_search": health["configured"],
                 "supports_forecast": ML_AVAILABLE,
+                "supports_anomaly_summary": True,
+                "supports_compare_summary": True,
+                "api_schema": "/api/openapi.json",
                 "primary_routes": {
                     "workspace": "/api/workspace",
                     "dashboard": "/api/dashboard",
                     "command_center": "/api/command-center",
+                    "anomalies": "/api/anomalies",
+                    "compare_summary": "/api/compare/summary?logins=<comma-separated-logins>",
                     "history": "/api/history/<login>",
                     "prediction": "/api/ml/predict/<login>",
                 },
@@ -1408,12 +1569,16 @@ def create_app() -> Flask:
     @app.get("/api/health")
     def health() -> Any:
         error = service.config_error()
+        cache = service.cache_status()
         status = {
             "ok": True,
             "configured": error is None,
             "error": error,
             "generated_at": utc_now_iso(),
             "cache_age_seconds": service.cache_age_seconds(),
+            "cache_ttl_seconds": cache["ttl_seconds"],
+            "cache_is_warm": cache["is_warm"],
+            "cache_is_fresh": cache["is_fresh"],
         }
         return jsonify(status), 200
 
@@ -1437,6 +1602,22 @@ def create_app() -> Flask:
         refresh = request.args.get("refresh") in {"1", "true", "yes"}
         selected_login = request.args.get("selected")
         return jsonify(service.get_workspace_bundle(selected_login=selected_login, force_refresh=refresh))
+
+    @app.get("/api/anomalies")
+    def anomalies() -> Any:
+        requested = request.args.get("logins")
+        logins = parse_streamers(requested) if requested else None
+        return json_service_response(lambda: service.get_anomaly_summary(logins))
+
+    @app.get("/api/compare/summary")
+    def compare_summary() -> Any:
+        requested = request.args.get("logins")
+        logins = parse_streamers(requested) if requested else config.streamers[:4]
+        return json_service_response(lambda: service.get_compare_summary(logins))
+
+    @app.get("/api/openapi.json")
+    def openapi_schema() -> Any:
+        return jsonify(service.get_api_schema())
 
     @app.get("/api/stream/<login>")
     def stream(login: str) -> Any:

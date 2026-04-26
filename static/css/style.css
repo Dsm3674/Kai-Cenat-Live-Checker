@@ -4118,6 +4118,13 @@ h1 {
     margin-top: 12px;
 }
 
+.focus-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    align-items: start;
+}
+
 .mission-strip-sidebar,
 .briefing-grid-sidebar {
     display: grid;
@@ -4141,22 +4148,34 @@ h1 {
 }
 
 .workspace-main .hero.panel,
+.workspace-main .focus-layout,
 .workspace-main .kpi-grid,
 .workspace-main .dashboard-grid {
     margin: 0;
 }
 
 .workspace-main .dashboard-grid {
-    grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workspace-main .focus-layout .stream-panel,
+.workspace-main .focus-layout .profile-panel {
+    margin: 0;
+}
+
+.workspace-main .focus-layout .stream-panel {
+    width: min(100%, 980px);
+    justify-self: center;
+}
+
+.workspace-main .focus-layout .profile-panel {
+    width: min(100%, 980px);
+    min-width: 0;
+    justify-self: center;
 }
 
 .workspace-main .forecast-panel {
-    grid-column: 1;
-}
-
-.workspace-main .stream-panel,
-.workspace-main .profile-panel {
-    grid-column: 2;
+    grid-column: 1 / -1;
 }
 
 .workspace-main .panel-wide,
@@ -4285,7 +4304,7 @@ h1 {
 }
 
 .workspace-main .stream-panel .player-shell {
-    min-height: 280px;
+    min-height: 420px;
 }
 
 .workspace-main .profile-panel .profile-metrics {
@@ -4300,10 +4319,16 @@ h1 {
 
 @media (max-width: 1080px) {
     .workspace-layout {
-        grid-template-columns: 1fr;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .workspace-main {
+        order: 1;
     }
 
     .workspace-sidebar {
+        order: 2;
         position: static;
     }
 
@@ -4311,8 +4336,11 @@ h1 {
         grid-template-columns: 1fr;
     }
 
+    .focus-layout {
+        grid-template-columns: 1fr;
+    }
+
     .workspace-main .forecast-panel,
-    .workspace-main .stream-panel,
     .workspace-main .profile-panel {
         grid-column: auto;
     }

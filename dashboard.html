@@ -123,6 +123,14 @@
 
                     <article class="briefing-panel">
                         <div class="briefing-head">
+                            <span>Anomaly watch</span>
+                            <strong id="anomalyCount">0</strong>
+                        </div>
+                        <div id="anomalySummary" class="briefing-list"></div>
+                    </article>
+
+                    <article class="briefing-panel">
+                        <div class="briefing-head">
                             <span>Zone digest</span>
                             <strong id="commandZonesCount">0</strong>
                         </div>
@@ -206,6 +214,78 @@
                     </div>
                 </header>
 
+                <section class="focus-layout" aria-label="Focused monitoring workspace">
+                    <section id="watch-module" class="panel stream-panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="panel-kicker">Embedded view</p>
+                                <h2>Live Watch</h2>
+                                <p>Keep the active channel centered while staying inside the operations workspace.</p>
+                            </div>
+                        </div>
+                        <div class="player-shell">
+                            <iframe
+                                id="streamPlayer"
+                                class="player-frame hidden"
+                                title="Twitch stream player"
+                                allowfullscreen
+                                scrolling="no"
+                                frameborder="0"
+                            ></iframe>
+                            <div id="playerState" class="player-state">Choose a streamer to load the embedded Twitch player.</div>
+                        </div>
+                        <p id="playerMeta" class="player-meta">The player uses Twitch's official embed and follows the current host domain automatically.</p>
+                    </section>
+
+                    <section id="brief-module" class="panel profile-panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="panel-kicker">Focused brief</p>
+                                <h2>Focused Brief</h2>
+                                <p>High-level profile, operating context, and model read for the active creator.</p>
+                            </div>
+                        </div>
+                        <div class="profile-card">
+                            <div class="profile-topline">
+                                <div>
+                                    <p class="profile-label">Selected streamer</p>
+                                    <h3 id="selectedName">Waiting for data</h3>
+                                    <p id="selectedLogin" class="profile-handle">@streamer</p>
+                                </div>
+                                <div class="profile-actions">
+                                    <button id="removeStreamerButton" class="button button-danger" type="button">Remove</button>
+                                    <a id="watchLink" class="button button-secondary" href="https://www.twitch.tv" target="_blank" rel="noreferrer">Open channel</a>
+                                </div>
+                            </div>
+                            <p id="selectedTitle" class="profile-title">Connect data to view the live title and creator profile.</p>
+                            <p id="selectedDescription" class="profile-description">This panel becomes a concise executive summary for one streamer at a time.</p>
+                            <div id="selectedGroups" class="chip-row"></div>
+                            <dl class="profile-metrics">
+                                <div>
+                                    <dt>Category</dt>
+                                    <dd id="selectedCategory">--</dd>
+                                </div>
+                                <div>
+                                    <dt>Uptime</dt>
+                                    <dd id="selectedUptime">--</dd>
+                                </div>
+                                <div>
+                                    <dt>Peak</dt>
+                                    <dd id="selectedPeak">--</dd>
+                                </div>
+                                <div>
+                                    <dt>Sessions</dt>
+                                    <dd id="selectedSessions">--</dd>
+                                </div>
+                            </dl>
+                            <div class="insight-box">
+                                <span class="profile-label">Research note</span>
+                                <p id="selectedInsight">The dashboard will summarize current momentum, historical consistency, model quality, and anomaly risk here.</p>
+                            </div>
+                        </div>
+                    </section>
+                </section>
+
                 <section class="kpi-grid" aria-label="Key performance indicators">
                     <article class="kpi-card accent-card">
                         <div class="kpi-head">
@@ -263,105 +343,35 @@
                 </section>
 
                 <main class="dashboard-grid">
-            <section id="operations-zone" class="section-divider section-divider-wide">
-                <span>02</span>
-                <strong>Live Operations</strong>
-                <p>Focused monitoring tools for the active creator and current watch cycle.</p>
-            </section>
+                    <section id="operations-zone" class="section-divider section-divider-wide">
+                        <span>02</span>
+                        <strong>Live Operations</strong>
+                        <p>Forecast review, cohort context, and active creator monitoring in one scroll.</p>
+                    </section>
 
-            <section id="forecast-module" class="panel forecast-panel">
-                <div class="panel-heading">
-                    <div>
-                        <p class="panel-kicker">Forecast surface</p>
-                        <h2>Forecast</h2>
-                        <p>Viewer history, short-horizon forecast, and confidence envelope for the active creator.</p>
-                    </div>
-                    <div class="panel-status-cluster">
-                        <div id="selectedStatusPill" class="pill neutral">Awaiting data</div>
-                        <div id="forecastSamples" class="panel-chip panel-chip-muted">No samples</div>
-                    </div>
-                </div>
-                <div class="chart-wrap">
-                    <canvas id="mainChart"></canvas>
-                    <div id="chartState" class="chart-state hidden"></div>
-                </div>
-            </section>
+                    <section id="forecast-module" class="panel forecast-panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="panel-kicker">Forecast surface</p>
+                                <h2>Forecast</h2>
+                                <p>Viewer history, short-horizon forecast, and confidence envelope for the active creator.</p>
+                            </div>
+                            <div class="panel-status-cluster">
+                                <div id="selectedStatusPill" class="pill neutral">Awaiting data</div>
+                                <div id="forecastSamples" class="panel-chip panel-chip-muted">No samples</div>
+                            </div>
+                        </div>
+                        <div class="chart-wrap">
+                            <canvas id="mainChart"></canvas>
+                            <div id="chartState" class="chart-state hidden"></div>
+                        </div>
+                    </section>
 
-            <section id="watch-module" class="panel stream-panel">
-                <div class="panel-heading">
-                    <div>
-                        <p class="panel-kicker">Embedded view</p>
-                        <h2>Live Watch</h2>
-                        <p>Keep the active channel visible while staying inside the operations workspace.</p>
-                    </div>
-                </div>
-                <div class="player-shell">
-                    <iframe
-                        id="streamPlayer"
-                        class="player-frame hidden"
-                        title="Twitch stream player"
-                        allowfullscreen
-                        scrolling="no"
-                        frameborder="0"
-                    ></iframe>
-                    <div id="playerState" class="player-state">Choose a streamer to load the embedded Twitch player.</div>
-                </div>
-                <p id="playerMeta" class="player-meta">The player uses Twitch's official embed and follows the current host domain automatically.</p>
-            </section>
-
-            <section id="brief-module" class="panel profile-panel">
-                <div class="panel-heading">
-                    <div>
-                        <p class="panel-kicker">Focused brief</p>
-                        <h2>Focused Brief</h2>
-                        <p>High-level profile, operating context, and model read for the active creator.</p>
-                    </div>
-                </div>
-                <div class="profile-card">
-                    <div class="profile-topline">
-                        <div>
-                            <p class="profile-label">Selected streamer</p>
-                            <h3 id="selectedName">Waiting for data</h3>
-                            <p id="selectedLogin" class="profile-handle">@streamer</p>
-                        </div>
-                        <div class="profile-actions">
-                            <button id="removeStreamerButton" class="button button-danger" type="button">Remove</button>
-                            <a id="watchLink" class="button button-secondary" href="https://www.twitch.tv" target="_blank" rel="noreferrer">Open channel</a>
-                        </div>
-                    </div>
-                    <p id="selectedTitle" class="profile-title">Connect data to view the live title and creator profile.</p>
-                    <p id="selectedDescription" class="profile-description">This panel becomes a concise executive summary for one streamer at a time.</p>
-                    <div id="selectedGroups" class="chip-row"></div>
-                    <dl class="profile-metrics">
-                        <div>
-                            <dt>Category</dt>
-                            <dd id="selectedCategory">--</dd>
-                        </div>
-                        <div>
-                            <dt>Uptime</dt>
-                            <dd id="selectedUptime">--</dd>
-                        </div>
-                        <div>
-                            <dt>Peak</dt>
-                            <dd id="selectedPeak">--</dd>
-                        </div>
-                        <div>
-                            <dt>Sessions</dt>
-                            <dd id="selectedSessions">--</dd>
-                        </div>
-                    </dl>
-                    <div class="insight-box">
-                        <span class="profile-label">Research note</span>
-                        <p id="selectedInsight">The dashboard will summarize current momentum, historical consistency, model quality, and anomaly risk here.</p>
-                    </div>
-                </div>
-            </section>
-
-            <section id="analysis-zone" class="section-divider section-divider-wide">
-                <span>03</span>
-                <strong>Analysis</strong>
-                <p>Comparative rankings, cohort concentration, and category behavior.</p>
-            </section>
+                    <section id="analysis-zone" class="section-divider section-divider-wide">
+                        <span>03</span>
+                        <strong>Analysis</strong>
+                        <p>Comparative rankings, cohort concentration, and category behavior.</p>
+                    </section>
 
             <section id="leaderboard-module" class="panel">
                 <div class="panel-heading">
