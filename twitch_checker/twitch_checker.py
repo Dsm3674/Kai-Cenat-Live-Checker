@@ -629,6 +629,78 @@ class TwitchService:
             "alert_thresholds": self.config.alert_thresholds,
         }
 
+    def get_command_center(self) -> dict[str, Any]:
+        error = self.config_error()
+        if error:
+            return self._build_command_center_fallback(error)
+        dashboard = self.get_dashboard()
+        return self._build_command_center(dashboard)
+
+    def get_workspace_bundle(self, selected_login: str | None = None, force_refresh: bool = False) -> dict[str, Any]:
+        health = {
+            "ok": True,
+            "configured": self.config_error() is None,
+            "error": self.config_error(),
+            "generated_at": utc_now_iso(),
+            "cache_age_seconds": self.cache_age_seconds(),
+        }
+
+        if health["configured"]:
+            dashboard = self.get_dashboard(force_refresh=force_refresh)
+            command_center = self._build_command_center(dashboard)
+        else:
+            dashboard = {
+                "generated_at": utc_now_iso(),
+                "title": self.config.frontend_title,
+                "check_interval": self.config.check_interval,
+                "summary": {
+                    "tracked": len(self.config.streamers),
+                    "live": 0,
+                    "offline": len(self.config.streamers),
+                    "current_viewers": 0,
+                },
+                "overview": {"dominant_category": "Awaiting data"},
+                "group_summary": [],
+                "leaderboards": {"live_now": [], "best_peak": [], "most_active": [], "trend": []},
+                "category_mix": [],
+                "alerts": [],
+                "streamers": [],
+                "compare_defaults": self.config.streamers[: min(4, len(self.config.streamers))],
+            }
+            command_center = self._build_command_center_fallback(health["error"] or "Configuration required.")
+
+        normalized_login = normalize_login(selected_login) if selected_login else ""
+        selected_stream = None
+        if normalized_login:
+            try:
+                selected_stream = self.get_stream(normalized_login) if health["configured"] else None
+            except (ValueError, RuntimeError, requests.RequestException):
+                selected_stream = None
+        if not selected_stream and dashboard.get("streamers"):
+            selected_stream = dashboard["streamers"][0]
+
+        return {
+            "generated_at": utc_now_iso(),
+            "payload_version": "workspace.v1",
+            "config": self.get_config(),
+            "health": health,
+            "dashboard": dashboard,
+            "command_center": command_center,
+            "selected_streamer": selected_stream,
+            "integration": {
+                "recommended_refresh_seconds": self.config.check_interval,
+                "supports_search": health["configured"],
+                "supports_forecast": ML_AVAILABLE,
+                "primary_routes": {
+                    "workspace": "/api/workspace",
+                    "dashboard": "/api/dashboard",
+                    "command_center": "/api/command-center",
+                    "history": "/api/history/<login>",
+                    "prediction": "/api/ml/predict/<login>",
+                },
+            },
+        }
+
     def get_dashboard(self, logins: list[str] | None = None, force_refresh: bool = False) -> dict[str, Any]:
         requested_logins = parse_streamers(logins or self.config.streamers)
         if not requested_logins:
@@ -760,6 +832,228 @@ class TwitchService:
                 for item in fallback
             ]
         return snapshots
+
+    def _build_command_center_fallback(self, error: str) -> dict[str, Any]:
+        watchlist_size = len(self.config.streamers)
+        checks = [
+            {"name": "Twitch credentials", "status": "blocked", "detail": error},
+            {
+                "name": "Watchlist scope",
+                "status": "healthy" if watchlist_size else "watch",
+                "detail": f"{watchlist_size} tracked creators are configured locally.",
+            },
+            {
+                "name": "Forecast layer",
+                "status": "watch",
+                "detail": "Historical forecasting remains available once local session data accumulates.",
+            },
+            {
+                "name": "Discord notifications",
+                "status": "healthy" if self.config.enable_discord_notifications and self.config.discord_webhook else "watch",
+                "detail": "Webhook is configured." if self.config.enable_discord_notifications and self.config.discord_webhook else "Notifications are optional and currently inactive.",
+            },
+        ]
+        return {
+            "generated_at": utc_now_iso(),
+            "posture": "Credential Mode",
+            "posture_score": 16,
+            "operation_brief": "The dashboard is in credential mode. The layout stays usable, but live Twitch telemetry, search, and live-event scoring are waiting on a client ID and secret.",
+            "system_checks": checks,
+            "risk_register": [
+                {
+                    "name": "Telemetry blocked",
+                    "status": "high",
+                    "detail": "Without Twitch credentials, the watchlist cannot pull live status or audience counts.",
+                }
+            ],
+            "zone_status": [
+                {"name": "Overview", "status": "watch", "detail": "Presentation mode is active with placeholder summary values."},
+                {"name": "Operations", "status": "watch", "detail": "Forecast and player remain visible, but live operations are offline."},
+                {"name": "Analysis", "status": "watch", "detail": "Historical analytics improve as local tracking data accumulates."},
+                {"name": "Archive", "status": "healthy", "detail": "Stored local state can still power sessions, events, and fallback archive views."},
+            ],
+            "watchlist_pulse": [
+                {
+                    "login": login,
+                    "display_name": login,
+                    "status": "standby",
+                    "value": 0,
+                    "detail": "Awaiting live audience data after credentials are added.",
+                }
+                for login in self.config.streamers[:4]
+            ],
+            "event_counts": {"high": 1, "medium": 0, "low": 0},
+        }
+
+    def _build_command_center(self, dashboard: dict[str, Any]) -> dict[str, Any]:
+        alerts = dashboard.get("alerts", [])
+        summary = dashboard.get("summary", {})
+        streamers = dashboard.get("streamers", [])
+
+        high_events = sum(1 for alert in alerts if alert.get("severity") == "high")
+        medium_events = sum(1 for alert in alerts if alert.get("severity") == "medium")
+        low_events = sum(1 for alert in alerts if alert.get("severity") == "low")
+        live_ratio = (summary.get("live", 0) / max(summary.get("tracked", 1), 1)) if summary.get("tracked", 0) else 0
+        viewers = summary.get("current_viewers", 0)
+        top_streamer = max(streamers, key=lambda item: item.get("viewer_count", 0), default=None)
+
+        posture_score = 18
+        posture_score += min(int(live_ratio * 34), 34)
+        posture_score += min(viewers // 6000, 18)
+        posture_score += min(high_events * 16 + medium_events * 7 + low_events * 2, 24)
+        posture_score += 8 if top_streamer and top_streamer.get("is_live") else 0
+        posture_score = max(min(posture_score, 100), 0)
+
+        if posture_score >= 78:
+            posture = "Critical"
+        elif posture_score >= 56:
+            posture = "Elevated"
+        elif posture_score >= 34:
+            posture = "Watch"
+        else:
+            posture = "Nominal"
+
+        system_checks = [
+            {"name": "Twitch credentials", "status": "healthy", "detail": "Authenticated against the Twitch API."},
+            {
+                "name": "Dashboard cache",
+                "status": "healthy" if (self.cache_age_seconds() or 0) <= max(self.config.check_interval * 2, 90) else "watch",
+                "detail": f"Cache age is {self.cache_age_seconds() or 0}s with a {self.config.check_interval}s refresh cadence.",
+            },
+            {
+                "name": "Watchlist coverage",
+                "status": "healthy" if summary.get("tracked", 0) >= 6 else "watch",
+                "detail": f"{summary.get('tracked', 0)} creators are currently tracked across {len(self.config.streamer_groups)} groups.",
+            },
+            {
+                "name": "Alert thresholds",
+                "status": "healthy" if self.config.alert_thresholds else "watch",
+                "detail": f"{len(self.config.alert_thresholds)} milestone thresholds are armed.",
+            },
+            {
+                "name": "Forecast layer",
+                "status": "healthy" if ML_AVAILABLE else "watch",
+                "detail": "Machine-learning forecast helpers are available." if ML_AVAILABLE else "Prediction falls back to stored local history.",
+            },
+            {
+                "name": "Discord notifications",
+                "status": "healthy" if self.config.enable_discord_notifications and self.config.discord_webhook else "watch",
+                "detail": "Webhook dispatch is armed." if self.config.enable_discord_notifications and self.config.discord_webhook else "Webhook dispatch is not active.",
+            },
+        ]
+
+        risk_candidates: list[dict[str, Any]] = []
+        for streamer in streamers:
+            analytics = streamer.get("analytics", {})
+            trend_score = analytics.get("trend_score", 0)
+            consistency = analytics.get("consistency_score", 0)
+            peak = analytics.get("best_peak_viewers", 0)
+            current = streamer.get("viewer_count", 0)
+
+            if streamer.get("is_live") and trend_score >= 140:
+                risk_candidates.append(
+                    {
+                        "name": streamer["display_name"],
+                        "status": "high",
+                        "detail": f"Momentum is running hot at {trend_score} with {current:,} live viewers.",
+                    }
+                )
+            elif streamer.get("is_live") and current and peak and current >= int(peak * 0.85):
+                risk_candidates.append(
+                    {
+                        "name": streamer["display_name"],
+                        "status": "medium",
+                        "detail": f"Current audience is nearing its historical peak at {current:,} viewers.",
+                    }
+                )
+            elif not streamer.get("is_live") and consistency >= 70:
+                risk_candidates.append(
+                    {
+                        "name": streamer["display_name"],
+                        "status": "watch",
+                        "detail": f"Highly consistent creator is currently offline; keep them in the monitoring rotation.",
+                    }
+                )
+
+        for alert in alerts[:3]:
+            risk_candidates.append(
+                {
+                    "name": alert.get("display_name", alert.get("login", "Watchlist event")),
+                    "status": alert.get("severity", "watch"),
+                    "detail": alert.get("message", "Recent event surfaced in the watchlist."),
+                }
+            )
+
+        zone_status = [
+            {
+                "name": "Overview",
+                "status": "healthy" if summary.get("tracked", 0) else "watch",
+                "detail": f"{summary.get('tracked', 0)} creators, {summary.get('live', 0)} live, and {summary.get('current_viewers', 0):,} concurrent viewers.",
+            },
+            {
+                "name": "Operations",
+                "status": "healthy" if summary.get("live", 0) else "watch",
+                "detail": f"{summary.get('live', 0)} live operations with forecast canvas and embedded watch ready.",
+            },
+            {
+                "name": "Analysis",
+                "status": "healthy" if dashboard.get("category_mix") else "watch",
+                "detail": f"{len(dashboard.get('leaderboards', {}).get('trend', []))} ranked momentum entries and {len(dashboard.get('category_mix', []))} active taxonomy buckets.",
+            },
+            {
+                "name": "Archive",
+                "status": "healthy" if alerts else "watch",
+                "detail": f"{len(alerts)} recent events and rolling session history are available for review.",
+            },
+        ]
+
+        pulse_rows = []
+        for streamer in sorted(
+            streamers,
+            key=lambda item: (
+                1 if item.get("is_live") else 0,
+                item.get("analytics", {}).get("trend_score", 0),
+                item.get("viewer_count", 0),
+            ),
+            reverse=True,
+        )[:6]:
+            analytics = streamer.get("analytics", {})
+            pulse_rows.append(
+                {
+                    "login": streamer["login"],
+                    "display_name": streamer["display_name"],
+                    "status": "live" if streamer.get("is_live") else "standby",
+                    "value": streamer.get("viewer_count") or analytics.get("best_peak_viewers", 0),
+                    "detail": (
+                        f"{streamer.get('viewer_count', 0):,} live viewers, trend {analytics.get('trend_score', 0)}"
+                        if streamer.get("is_live")
+                        else f"{analytics.get('session_count', 0)} sessions tracked, consistency {analytics.get('consistency_score', 0)}"
+                    ),
+                }
+            )
+
+        hottest_text = (
+            f"{top_streamer['display_name']} leads the board with {top_streamer.get('viewer_count', 0):,} viewers."
+            if top_streamer and top_streamer.get("is_live")
+            else "No creator is live right now, so the board is leaning on stored behavior and session history."
+        )
+        operation_brief = (
+            f"{hottest_text} "
+            f"{summary.get('live', 0)} of {summary.get('tracked', 0)} tracked creators are active, with "
+            f"{high_events} high-severity and {medium_events} medium-severity recent events shaping posture."
+        )
+
+        return {
+            "generated_at": dashboard.get("generated_at", utc_now_iso()),
+            "posture": posture,
+            "posture_score": posture_score,
+            "operation_brief": operation_brief,
+            "system_checks": system_checks,
+            "risk_register": risk_candidates[:5],
+            "zone_status": zone_status,
+            "watchlist_pulse": pulse_rows,
+            "event_counts": {"high": high_events, "medium": medium_events, "low": low_events},
+        }
 
     def _get_cached_dashboard(self, force_refresh: bool = False) -> dict[str, Any]:
         with self._cache_lock:
@@ -1133,6 +1427,16 @@ def create_app() -> Flask:
         requested = request.args.get("logins")
         logins = parse_streamers(requested) if requested else None
         return json_service_response(lambda: service.get_dashboard(logins, force_refresh=refresh))
+
+    @app.get("/api/command-center")
+    def command_center() -> Any:
+        return jsonify(service.get_command_center())
+
+    @app.get("/api/workspace")
+    def workspace() -> Any:
+        refresh = request.args.get("refresh") in {"1", "true", "yes"}
+        selected_login = request.args.get("selected")
+        return jsonify(service.get_workspace_bundle(selected_login=selected_login, force_refresh=refresh))
 
     @app.get("/api/stream/<login>")
     def stream(login: str) -> Any:

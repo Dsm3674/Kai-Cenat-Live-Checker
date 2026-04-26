@@ -1,9 +1,11 @@
 const state = {
     chart: null,
+    command: null,
     config: null,
     dashboard: null,
     health: null,
     history: null,
+    integration: null,
     ml: null,
     selectedLogin: "",
     intervalId: null,
@@ -17,6 +19,18 @@ const elements = {
     appTitle: document.getElementById("appTitle"),
     categoryMix: document.getElementById("categoryMix"),
     chartState: document.getElementById("chartState"),
+    commandBrief: document.getElementById("commandBrief"),
+    commandChecksCount: document.getElementById("commandChecksCount"),
+    commandEventCounts: document.getElementById("commandEventCounts"),
+    commandIndexHost: document.getElementById("commandIndexHost"),
+    commandIndexMode: document.getElementById("commandIndexMode"),
+    commandIndexSummary: document.getElementById("commandIndexSummary"),
+    commandPosture: document.getElementById("commandPosture"),
+    commandPulseCount: document.getElementById("commandPulseCount"),
+    commandRisksCount: document.getElementById("commandRisksCount"),
+    commandScore: document.getElementById("commandScore"),
+    commandTopPosture: document.getElementById("commandTopPosture"),
+    commandZonesCount: document.getElementById("commandZonesCount"),
     forecastSamples: document.getElementById("forecastSamples"),
     groupSummary: document.getElementById("groupSummary"),
     heroLastUpdated: document.getElementById("heroLastUpdated"),
@@ -35,6 +49,7 @@ const elements = {
     kpiSession: document.getElementById("kpiSession"),
     kpiTrendBadge: document.getElementById("kpiTrendBadge"),
     leaderboardList: document.getElementById("leaderboardList"),
+    loadingScreen: document.getElementById("loadingScreen"),
     mainChart: document.getElementById("mainChart"),
     missionCategory: document.getElementById("missionCategory"),
     missionCategoryMeta: document.getElementById("missionCategoryMeta"),
@@ -63,10 +78,18 @@ const elements = {
     selectedTitle: document.getElementById("selectedTitle"),
     selectedUptime: document.getElementById("selectedUptime"),
     sessionList: document.getElementById("sessionList"),
+    stripBusState: document.getElementById("stripBusState"),
+    stripEmbedState: document.getElementById("stripEmbedState"),
+    stripForecastState: document.getElementById("stripForecastState"),
+    stripOpsState: document.getElementById("stripOpsState"),
     streamerSelect: document.getElementById("streamerSelect"),
     systemBanner: document.getElementById("systemBanner"),
+    systemChecks: document.getElementById("systemChecks"),
     trackedGrid: document.getElementById("trackedGrid"),
+    riskRegister: document.getElementById("riskRegister"),
     watchLink: document.getElementById("watchLink"),
+    watchlistPulse: document.getElementById("watchlistPulse"),
+    zoneDigest: document.getElementById("zoneDigest"),
 };
 
 const chartAvailable = typeof window.Chart !== "undefined";
@@ -179,6 +202,13 @@ function hideBanner() {
     elements.systemBanner.textContent = "";
 }
 
+function hideLoadingScreen() {
+    if (!elements.loadingScreen) {
+        return;
+    }
+    elements.loadingScreen.classList.add("is-hidden");
+}
+
 function getSelectedStreamer() {
     return state.dashboard?.streamers?.find((streamer) => streamer.login === state.selectedLogin) || null;
 }
@@ -255,6 +285,69 @@ function buildFallbackDashboard() {
     };
 }
 
+function buildFallbackCommandCenter() {
+    const dashboard = state.dashboard || buildFallbackDashboard();
+    const configured = Boolean(state.health?.configured);
+
+    return {
+        posture: configured ? "Nominal" : "Credential Mode",
+        posture_score: configured ? 32 : 16,
+        operation_brief: configured
+            ? "Telemetry is online, but the command layer is still waiting for stronger session history before it can issue sharper operational guidance."
+            : "Credential mode is active. Add Twitch credentials to unlock live telemetry, risk scoring, and search-driven watchlist expansion.",
+        system_checks: [
+            {
+                name: "Twitch credentials",
+                status: configured ? "healthy" : "blocked",
+                detail: configured ? "Connected to the Twitch API." : "Missing client ID and secret.",
+            },
+            {
+                name: "Watchlist",
+                status: dashboard.summary.tracked ? "healthy" : "watch",
+                detail: `${dashboard.summary.tracked} tracked creators loaded.`,
+            },
+            {
+                name: "Model layer",
+                status: "watch",
+                detail: "Forecast quality improves as more local history accumulates.",
+            },
+        ],
+        risk_register: [],
+        zone_status: [
+            {
+                name: "Overview",
+                status: configured ? "healthy" : "watch",
+                detail: `${dashboard.summary.tracked} creators and ${dashboard.summary.live} live sessions in view.`,
+            },
+            {
+                name: "Operations",
+                status: "watch",
+                detail: "Forecast, player, and profile stack are online.",
+            },
+            {
+                name: "Analysis",
+                status: "watch",
+                detail: "Leaderboards and category mix are waiting for deeper historical shape.",
+            },
+            {
+                name: "Archive",
+                status: "watch",
+                detail: "Recent sessions and event wire expand as the tracker keeps running.",
+            },
+        ],
+        watchlist_pulse: (dashboard.streamers || []).slice(0, 4).map((streamer) => ({
+            login: streamer.login,
+            display_name: streamer.display_name,
+            status: streamer.is_live ? "live" : "standby",
+            value: streamer.viewer_count || streamer.analytics?.best_peak_viewers || 0,
+            detail: streamer.is_live
+                ? `${formatCompact(streamer.viewer_count)} viewers right now`
+                : `${streamer.analytics?.session_count || 0} tracked sessions`,
+        })),
+        event_counts: { high: 0, medium: 0, low: 0 },
+    };
+}
+
 function getTrendClass(trend) {
     if (trend === "growing" || trend === "high") {
         return "growing";
@@ -263,6 +356,19 @@ function getTrendClass(trend) {
         return "declining";
     }
     if (trend === "stable" || trend === "medium") {
+        return "stable";
+    }
+    return "neutral";
+}
+
+function getStatusClass(status) {
+    if (status === "healthy" || status === "nominal" || status === "live") {
+        return "growing";
+    }
+    if (status === "blocked" || status === "critical" || status === "high") {
+        return "declining";
+    }
+    if (status === "watch" || status === "elevated" || status === "medium") {
         return "stable";
     }
     return "neutral";
@@ -313,6 +419,119 @@ function renderMissionStrip() {
     elements.missionRefreshMeta.textContent = state.health?.cache_age_seconds != null
         ? `Dashboard cache ${formatCacheAge(state.health.cache_age_seconds)}`
         : "Polling begins after the first dashboard refresh.";
+}
+
+function renderBriefingList(container, items, emptyMessage) {
+    clearElement(container);
+    if (!items.length) {
+        appendEmptyState(container, emptyMessage);
+        return;
+    }
+
+    for (const item of items) {
+        const row = createElement("article", { className: "briefing-row" });
+
+        const meta = createElement("div", { className: "briefing-row-copy" });
+        meta.appendChild(createElement("strong", { text: item.name || item.display_name || "Unknown" }));
+        meta.appendChild(createElement("p", { text: item.detail || item.message || "No detail available." }));
+        row.appendChild(meta);
+
+        const badgeText = item.status ? titleCase(item.status) : item.value != null ? formatCompact(item.value) : "Open";
+        row.appendChild(
+            createElement("span", {
+                className: `pill ${getStatusClass(item.status)}`,
+                text: badgeText,
+            })
+        );
+        container.appendChild(row);
+    }
+}
+
+function renderWatchlistPulse() {
+    clearElement(elements.watchlistPulse);
+    const items = state.command?.watchlist_pulse || [];
+    if (!items.length) {
+        appendEmptyState(elements.watchlistPulse, "Watchlist pulse will populate once tracked creators begin producing signal.");
+        return;
+    }
+
+    for (const item of items) {
+        const card = createElement("article", { className: "pulse-card" });
+        const top = createElement("div", { className: "pulse-head" });
+        top.appendChild(createElement("strong", { text: item.display_name || item.login }));
+        top.appendChild(
+            createElement("span", {
+                className: `pill ${getStatusClass(item.status)}`,
+                text: titleCase(item.status || "watch"),
+            })
+        );
+        card.appendChild(top);
+        card.appendChild(createElement("div", { className: "pulse-value", text: formatCompact(item.value || 0) }));
+        card.appendChild(createElement("p", { text: item.detail || "No watchlist detail available." }));
+        elements.watchlistPulse.appendChild(card);
+    }
+}
+
+function renderEventCounts() {
+    clearElement(elements.commandEventCounts);
+    const counts = state.command?.event_counts || { high: 0, medium: 0, low: 0 };
+    const rows = [
+        ["High events", counts.high || 0, "declining"],
+        ["Medium events", counts.medium || 0, "stable"],
+        ["Low events", counts.low || 0, "neutral"],
+    ];
+
+    for (const [label, value, tone] of rows) {
+        const chip = createElement("span", { className: `signal-chip ${tone}` });
+        chip.appendChild(createElement("strong", { text: String(value) }));
+        chip.appendChild(createElement("small", { text: label }));
+        elements.commandEventCounts.appendChild(chip);
+    }
+}
+
+function renderCommandCenter() {
+    const command = state.command || buildFallbackCommandCenter();
+    const checks = command.system_checks || [];
+    const risks = command.risk_register || [];
+    const zones = command.zone_status || [];
+    const pulse = command.watchlist_pulse || [];
+
+    elements.commandTopPosture.textContent = command.posture || "Watch";
+    elements.commandPosture.textContent = command.posture || "Calibrating";
+    elements.commandScore.textContent = `${Math.round(command.posture_score || 0)}/100`;
+    elements.commandBrief.textContent = command.operation_brief || "The command layer is collecting enough signal to issue a stronger summary.";
+    elements.commandChecksCount.textContent = `${checks.filter((item) => item.status === "healthy").length}/${checks.length || 0}`;
+    elements.commandRisksCount.textContent = String(risks.length);
+    elements.commandZonesCount.textContent = String(zones.length);
+    elements.commandPulseCount.textContent = String(pulse.length);
+
+    const summaryBits = [];
+    if (state.dashboard?.summary) {
+        summaryBits.push(`${formatNumber(state.dashboard.summary.tracked)} tracked`);
+        summaryBits.push(`${formatNumber(state.dashboard.summary.live)} live`);
+        summaryBits.push(`${formatCompact(state.dashboard.summary.current_viewers)} viewers`);
+    }
+    elements.commandIndexSummary.textContent = summaryBits.length
+        ? `Index / ${summaryBits.join(" / ")} / command briefing active`
+        : "Index / command briefing active";
+    elements.commandIndexMode.textContent = command.posture
+        ? `Mode / ${command.posture.toLowerCase()} / organization tuned for fast scanning`
+        : "Mode / command overview";
+    elements.commandIndexHost.textContent = `Local command host: ${window.location.host}`;
+    elements.stripOpsState.textContent = `Ops: ${command.posture || "Watch"}`;
+    elements.stripBusState.textContent = state.health?.configured
+        ? `Data bus: ${state.health?.cache_age_seconds != null ? formatCacheAge(state.health.cache_age_seconds) : "fresh"}`
+        : "Data bus: credential mode";
+    elements.stripForecastState.textContent = state.ml?.status === "success" || state.command?.system_checks?.some((item) => item.name === "Forecast layer" && item.status === "healthy")
+        ? "Forecast: active"
+        : "Forecast: limited";
+    elements.stripEmbedState.textContent = `Embeds: ${state.selectedLogin ? titleCase(state.selectedLogin) : "ready"}`;
+
+    renderBriefingList(elements.systemChecks, checks, "System checks are still calibrating.");
+    renderBriefingList(elements.riskRegister, risks, "No immediate risks are active across the watchlist.");
+    renderBriefingList(elements.zoneDigest, zones, "Zone summaries will appear after the dashboard initializes.");
+    renderEventCounts();
+    renderWatchlistPulse();
 }
 
 function renderSelect() {
@@ -392,16 +611,26 @@ function renderProfile() {
     }
 
     const insightBits = [];
+    const selectedAlerts = (state.dashboard?.alerts || []).filter((alert) => alert.login === streamer.login);
+    const latestAlert = selectedAlerts[0] || null;
+    const peakGap = Math.max((streamer.analytics.best_peak_viewers || 0) - (streamer.viewer_count || 0), 0);
     if (streamer.is_live) {
         insightBits.push(`${streamer.display_name} is currently live in ${streamer.game_name || "an active category"}.`);
+        if (streamer.analytics.best_peak_viewers && peakGap > 0) {
+            insightBits.push(`They are ${formatCompact(peakGap)} viewers below their recorded peak.`);
+        }
     } else {
         insightBits.push(`${streamer.display_name} is currently offline, so the forecast layer is leaning on stored historical samples.`);
     }
     insightBits.push(`Consistency is ${streamer.analytics.consistency_score}/100 across ${streamer.analytics.session_count} tracked sessions.`);
+    insightBits.push(`Momentum is running at ${streamer.analytics.trend_score} versus the current historical baseline.`);
     if (state.ml?.status === "success") {
         insightBits.push(`The model estimates a short-horizon peak near ${formatCompact(state.ml.predicted_peak)} viewers with ${state.ml.confidence_label} confidence.`);
     } else {
         insightBits.push("The model is still collecting enough samples to produce a trustworthy short-term forecast.");
+    }
+    if (latestAlert) {
+        insightBits.push(`Latest watchlist event: ${latestAlert.message}`);
     }
     elements.selectedInsight.textContent = insightBits.join(" ");
     const snapshots = state.history?.recent_snapshots || streamer.recent_snapshots || [];
@@ -837,6 +1066,7 @@ function renderSearchResults() {
 function renderAll() {
     renderHero();
     renderMissionStrip();
+    renderCommandCenter();
     renderSelect();
     renderKPIs();
     renderProfile();
@@ -885,17 +1115,26 @@ async function refreshStreamData() {
 }
 
 async function refreshDashboard({ force = false } = {}) {
-    state.config = await fetchJson("/api/config");
-
-    try {
-        state.health = await fetchJson("/api/health");
-    } catch (error) {
-        state.health = { configured: false, error: error.message };
+    const params = new URLSearchParams();
+    if (force) {
+        params.set("refresh", "1");
+    }
+    if (state.selectedLogin) {
+        params.set("selected", state.selectedLogin);
     }
 
+    const workspaceUrl = `/api/workspace${params.toString() ? `?${params.toString()}` : ""}`;
+    const workspace = await fetchJson(workspaceUrl);
+    state.config = workspace.config || state.config;
+    state.health = workspace.health || state.health;
+    state.dashboard = workspace.dashboard?.streamers?.length ? workspace.dashboard : buildFallbackDashboard();
+    state.command = workspace.command_center || buildFallbackCommandCenter();
+    state.integration = workspace.integration || null;
+
     if (!state.health?.configured) {
-        state.dashboard = buildFallbackDashboard();
-        if (!state.selectedLogin && state.dashboard.streamers[0]) {
+        if (!state.selectedLogin && workspace.selected_streamer?.login) {
+            state.selectedLogin = workspace.selected_streamer.login;
+        } else if (!state.selectedLogin && state.dashboard.streamers[0]) {
             state.selectedLogin = state.dashboard.streamers[0].login;
         }
         showBanner("Credential mode is active. Add Twitch credentials in twitch_checker/config.json or .env to unlock live telemetry and search.", "warning");
@@ -905,10 +1144,8 @@ async function refreshDashboard({ force = false } = {}) {
     }
 
     hideBanner();
-    const dashboardUrl = force ? "/api/dashboard?refresh=1" : "/api/dashboard";
-    state.dashboard = await fetchJson(dashboardUrl);
     if (!state.selectedLogin || !state.dashboard.streamers.some((streamer) => streamer.login === state.selectedLogin)) {
-        state.selectedLogin = state.dashboard.streamers[0]?.login || "";
+        state.selectedLogin = workspace.selected_streamer?.login || state.dashboard.streamers[0]?.login || "";
     }
     await refreshStreamData();
     renderAll();
@@ -1030,8 +1267,10 @@ async function bootstrap() {
     try {
         await refreshDashboard();
         setupPolling(state.config?.check_interval || 60);
+        hideLoadingScreen();
     } catch (error) {
         showBanner(`Application bootstrap failed: ${error.message}`, "error");
+        hideLoadingScreen();
     }
 }
 

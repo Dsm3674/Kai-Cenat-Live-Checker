@@ -42,6 +42,29 @@ SAMPLE_DASHBOARD = {
     ],
 }
 
+SAMPLE_COMMAND_CENTER = {
+    "generated_at": "2026-04-06T12:00:00+00:00",
+    "posture": "Watch",
+    "posture_score": 47,
+    "operation_brief": "One creator is live and the watchlist is stable.",
+    "system_checks": [{"name": "Twitch credentials", "status": "healthy", "detail": "Connected."}],
+    "risk_register": [{"name": "Kai Cenat", "status": "medium", "detail": "Audience is running near peak."}],
+    "zone_status": [{"name": "Overview", "status": "healthy", "detail": "Overview is online."}],
+    "watchlist_pulse": [{"login": "kaicenat", "display_name": "Kai Cenat", "status": "live", "value": 12345, "detail": "Live viewers."}],
+    "event_counts": {"high": 0, "medium": 1, "low": 0},
+}
+
+SAMPLE_WORKSPACE = {
+    "generated_at": "2026-04-06T12:00:00+00:00",
+    "payload_version": "workspace.v1",
+    "config": {"title": "Audience Signal Lab", "check_interval": 60, "streamers": ["kaicenat"], "streamer_groups": {}, "history_limit": 12, "snapshot_limit": 72, "alert_thresholds": [1000]},
+    "health": {"ok": True, "configured": True, "error": None, "generated_at": "2026-04-06T12:00:00+00:00", "cache_age_seconds": 3},
+    "dashboard": SAMPLE_DASHBOARD,
+    "command_center": SAMPLE_COMMAND_CENTER,
+    "selected_streamer": SAMPLE_DASHBOARD["streamers"][0],
+    "integration": {"recommended_refresh_seconds": 60, "supports_search": True, "supports_forecast": True, "primary_routes": {"workspace": "/api/workspace"}},
+}
+
 
 class AppRoutesTest(unittest.TestCase):
     def test_health_route_returns_status_payload(self) -> None:
@@ -66,6 +89,30 @@ class AppRoutesTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(payload["title"], "Audience Signal Lab")
             self.assertEqual(payload["streamers"][0]["login"], "kaicenat")
+
+    def test_command_center_route_uses_service_payload(self) -> None:
+        with patch.object(TwitchService, "get_command_center", return_value=SAMPLE_COMMAND_CENTER):
+            app = create_app()
+            client = app.test_client()
+
+            response = client.get("/api/command-center")
+            payload = response.get_json()
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(payload["posture"], "Watch")
+            self.assertEqual(payload["watchlist_pulse"][0]["login"], "kaicenat")
+
+    def test_workspace_route_uses_service_payload(self) -> None:
+        with patch.object(TwitchService, "get_workspace_bundle", return_value=SAMPLE_WORKSPACE):
+            app = create_app()
+            client = app.test_client()
+
+            response = client.get("/api/workspace?selected=kaicenat")
+            payload = response.get_json()
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(payload["payload_version"], "workspace.v1")
+            self.assertEqual(payload["selected_streamer"]["login"], "kaicenat")
 
     def test_search_and_watchlist_routes(self) -> None:
         with patch.object(
