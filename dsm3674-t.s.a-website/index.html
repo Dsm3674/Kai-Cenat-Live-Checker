@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1"
+    />
+    <title>Brutalist Community Archive — TSA 2025</title>
+    <meta name="theme-color" content="#000000" />
+
+    <!-- ⭐ ADDED FAVICON LINES BELOW — NOTHING REMOVED ⭐ -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <!-- ⭐ END OF ADDED CODE ⭐ -->
+
+    <style>
+      html,
+      body,
+      #root {
+        min-height: 100%;
+      }
+      .fallback-splash {
+        font: 900 18px/1.2 ui-sans-serif, system-ui;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #fff;
+        background: #000;
+        padding: 24px;
+        border-bottom: 8px solid #fff;
+      }
+      .fallback-splash small {
+        display: block;
+        color: #aaa;
+        margin-top: 6px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+      }
+    </style>
+
+    <script>
+      (function () {
+        document.documentElement.dataset.theme = "light";
+        localStorage.setItem("theme", "light");
+      })();
+    </script>
+  </head>
+  <body>
+    <noscript>
+      <div class="fallback-splash">
+        Brutalist Archive
+        <small>Enable JavaScript to view the experience.</small>
+      </div>
+    </noscript>
+    <div id="root">
+      <div class="fallback-splash">
+        Brutalist Archive
+        <small>Loading interface…</small>
+      </div>
+    </div>
+
+    <script type="module" src="./src/main.jsx"></script>
+  </body>
+</html>
