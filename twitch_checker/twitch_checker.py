@@ -1564,6 +1564,10 @@ def create_app() -> Flask:
 
     @app.get("/")
     def index() -> Any:
+        return send_from_directory(BASE_DIR, "landing.html")
+
+    @app.get("/dashboard")
+    def dashboard_page() -> Any:
         return send_from_directory(BASE_DIR, "dashboard.html")
 
     @app.get("/api/health")
