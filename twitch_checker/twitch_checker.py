@@ -708,6 +708,86 @@ class TwitchService:
             },
         }
 
+    def get_streams_payload(
+        self,
+        only_live: bool = False,
+        embed_parent: str = "localhost",
+    ) -> dict[str, Any]:
+        """Lightweight stream cards for live/embed-focused frontends."""
+        dashboard = self.get_dashboard()
+        cards = dashboard.get("streamers", [])
+        if only_live:
+            cards = [card for card in cards if card.get("is_live")]
+
+        cards = sorted(
+            cards,
+            key=lambda card: (
+                1 if card.get("is_live") else 0,
+                card.get("viewer_count", 0),
+            ),
+            reverse=True,
+        )
+
+        parent = embed_parent or "localhost"
+        streams: list[dict[str, Any]] = []
+        for card in cards:
+            login = card["login"]
+            analytics = card.get("analytics", {})
+            streams.append(
+                {
+                    "login": login,
+                    "display_name": card["display_name"],
+                    "is_live": card.get("is_live", False),
+                    "title": card.get("title", ""),
+                    "game_name": card.get("game_name", "") or "Offline",
+                    "viewer_count": card.get("viewer_count", 0),
+                    "uptime": card.get("uptime", "Offline"),
+                    "started_at": card.get("started_at"),
+                    "profile_image_url": card.get("profile_image_url", ""),
+                    "thumbnail_url": card.get("thumbnail_url", ""),
+                    "url": card.get("url", f"https://www.twitch.tv/{login}"),
+                    "embed_url": (
+                        f"https://player.twitch.tv/?channel={login}"
+                        f"&parent={parent}&autoplay=false&muted=true"
+                    ),
+                    "chat_url": (
+                        f"https://www.twitch.tv/embed/{login}/chat"
+                        f"?parent={parent}&darkpopout"
+                    ),
+                    "groups": card.get("groups", []),
+                    "trend_score": analytics.get("trend_score", 0),
+                    "best_peak_viewers": analytics.get("best_peak_viewers", 0),
+                    "consistency_score": analytics.get("consistency_score", 0),
+                    "recent_snapshots": card.get("recent_snapshots", []),
+                }
+            )
+
+        return {
+            "generated_at": dashboard.get("generated_at", utc_now_iso()),
+            "summary": dashboard.get("summary", {}),
+            "embed_parent": parent,
+            "streams": streams,
+        }
+
+    def get_embed_descriptor(self, login: str, embed_parent: str = "localhost") -> dict[str, Any]:
+        normalized = normalize_login(login)
+        if not normalized:
+            raise ValueError("invalid_login")
+        parent = embed_parent or "localhost"
+        return {
+            "login": normalized,
+            "embed_parent": parent,
+            "player_url": (
+                f"https://player.twitch.tv/?channel={normalized}"
+                f"&parent={parent}&autoplay=true&muted=false"
+            ),
+            "chat_url": (
+                f"https://www.twitch.tv/embed/{normalized}/chat"
+                f"?parent={parent}&darkpopout"
+            ),
+            "channel_url": f"https://www.twitch.tv/{normalized}",
+        }
+
     def get_compare_summary(self, logins: list[str]) -> dict[str, Any]:
         compared = self.compare_streamers(logins)
         streamers = compared.get("streamers", [])
@@ -754,6 +834,8 @@ class TwitchService:
                 "/api/workspace": {"get": {"summary": "Bundled frontend bootstrap payload"}},
                 "/api/anomalies": {"get": {"summary": "Derived anomaly and recent event summary"}},
                 "/api/compare/summary": {"get": {"summary": "Comparison summary and leaders for selected streamers"}},
+                "/api/streams": {"get": {"summary": "Lightweight stream cards with Twitch embed URLs"}},
+                "/api/streams/embed/{login}": {"get": {"summary": "Twitch player/chat embed descriptor"}},
                 "/api/openapi.json": {"get": {"summary": "Machine-readable API schema"}},
             },
             "components": {
@@ -856,6 +938,8 @@ class TwitchService:
                     "command_center": "/api/command-center",
                     "anomalies": "/api/anomalies",
                     "compare_summary": "/api/compare/summary?logins=<comma-separated-logins>",
+                    "streams": "/api/streams",
+                    "stream_embed": "/api/streams/embed/<login>",
                     "history": "/api/history/<login>",
                     "prediction": "/api/ml/predict/<login>",
                 },
@@ -1709,6 +1793,23 @@ def create_app() -> Flask:
         if not normalized:
             return jsonify({"error": "invalid_login", "detail": "Invalid Twitch login."}), 400
         return json_service_response(lambda: service.get_analytics_stream(normalized))
+
+    def _embed_parent() -> str:
+        host = (request.host or "").split(":", 1)[0].strip().lower()
+        return host or "localhost"
+
+    @app.get("/api/streams")
+    def streams_list() -> Any:
+        only_live = request.args.get("live") in {"1", "true", "yes"}
+        return json_service_response(
+            lambda: service.get_streams_payload(only_live=only_live, embed_parent=_embed_parent())
+        )
+
+    @app.get("/api/streams/embed/<login>")
+    def streams_embed(login: str) -> Any:
+        return json_service_response(
+            lambda: service.get_embed_descriptor(login, embed_parent=_embed_parent())
+        )
 
     return app
 
