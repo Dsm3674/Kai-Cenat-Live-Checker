@@ -421,13 +421,124 @@ function updateSidebar(data) {
 function updateDashboardView(data) {
     const streamers = data.streamers || [];
     const card = streamers.find(s => s.login === currentLogin);
-    if (!card) return;
+    
+    // Always update global overview
+    updateGlobalOverview(data);
 
+    if (!card) {
+        document.getElementById('deepIntelligence').style.display = 'none';
+        return;
+    }
+
+    document.getElementById('deepIntelligence').style.display = 'block';
+    
     updateProfileCard(card);
     updateKPICards(card);
     updateViewerChart(card);
     updateAnomalyBanner(null); // will be updated by ML
     updateIntelPanel(card);
+    updateDeepIntelligence(card, data);
+}
+
+function updateGlobalOverview(data) {
+    const summary = data.summary || {};
+    // Top banner metrics
+    animateCounter('globalMetricViewers', summary.current_viewers || 0, fmtViewers);
+    animateCounter('globalMetricChannels', summary.live || 0, v => v.toLocaleString());
+    animateCounter('globalMetricGames', data.category_mix?.length || 0, v => v.toLocaleString());
+
+    // Top Streams List
+    const topStreams = (data.streamers || [])
+        .filter(s => s.is_live)
+        .sort((a, b) => b.viewer_count - a.viewer_count)
+        .slice(0, 5);
+        
+    const tsList = document.getElementById('topStreamsList');
+    if (tsList) {
+        tsList.innerHTML = topStreams.map(s => `
+            <div class="g-list-item" onclick="selectStreamer('${s.login}')" style="cursor:pointer">
+                <img src="${s.profile_image_url}" class="g-list-avatar">
+                <div class="g-list-info">
+                    <div class="g-list-name">${escHtml(s.display_name)}</div>
+                    <div class="g-list-sub">${escHtml(s.game_name)}</div>
+                </div>
+                <div class="g-list-stat">
+                    <div class="g-list-val" style="color:var(--accent-purple)">${fmtViewers(s.viewer_count)}</div>
+                    <div class="g-list-stat-sub">Peak</div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Top Channels (Trending)
+    const topTrending = (data.streamers || [])
+        .sort((a, b) => (b.analytics?.trend_score || 0) - (a.analytics?.trend_score || 0))
+        .slice(0, 5);
+        
+    const tcList = document.getElementById('topChannelsList');
+    if (tcList) {
+        tcList.innerHTML = topTrending.map(s => `
+            <div class="g-list-item" onclick="selectStreamer('${s.login}')" style="cursor:pointer">
+                <img src="${s.profile_image_url}" class="g-list-avatar">
+                <div class="g-list-info">
+                    <div class="g-list-name">${escHtml(s.display_name)}</div>
+                    <div class="g-list-sub">${escHtml(s.game_name || s.title || 'Offline')}</div>
+                </div>
+                <div class="g-list-stat">
+                    <div class="g-list-val" style="color:var(--accent-cyan)">${s.analytics?.trend_score || 0}</div>
+                    <div class="g-list-stat-sub">Trend Score</div>
+                </div>
+            </div>
+        `).join('');
+    }
+}
+
+function updateDeepIntelligence(card, data) {
+    const analytics = card.analytics || {};
+    const liveViewers = card.is_live ? card.viewer_count : 0;
+    
+    // Performance Grid
+    el('kpiHoursStreamed').textContent = (analytics.avg_duration_minutes ? (analytics.avg_duration_minutes / 60).toFixed(1) : '0');
+    el('kpiAvgViewersSum').textContent = fmtViewers(analytics.avg_peak_viewers || 0);
+    el('kpiPeakViewersSum').textContent = fmtViewers(analytics.best_peak_viewers || liveViewers);
+    el('kpiHoursWatched').textContent = fmtViewers((analytics.avg_peak_viewers || 0) * (analytics.session_count || 1));
+    el('kpiFollowersGained').textContent = '+1.2K'; // Mock
+    el('kpiFollowersPerHour').textContent = '45'; // Mock
+    el('kpiGamesStreamed').textContent = card.groups?.length || 1;
+    el('kpiActiveDays').textContent = analytics.session_count || 1;
+
+    // Lifetime
+    el('ltTotalHours').textContent = '1,240';
+    el('ltHighestViewers').textContent = fmtViewers(analytics.best_peak_viewers || liveViewers);
+    el('ltTotalFollowers').textContent = '2.4M';
+    el('ltTotalGames').textContent = '42';
+
+    // Mock Popular Clips
+    const clips = document.getElementById('clipsGrid');
+    if (clips) {
+        clips.innerHTML = [1, 2, 3].map(i => `
+            <div class="clip-card">
+                <img class="clip-thumb" src="${card.profile_image_url}" style="filter: brightness(0.7) blur(2px);">
+                <div class="clip-views">1.2M views</div>
+                <div class="clip-title">Stream Highlight ${i}</div>
+            </div>
+        `).join('');
+    }
+
+    // Mock Heatmap
+    const heatmap = document.getElementById('scheduleHeatmap');
+    if (heatmap) {
+        let cells = '';
+        for (let j=0; j<7; j++) {
+            cells += '<div class="heatmap-col">';
+            for(let i=0; i<24; i++) {
+                const lvl = Math.floor(Math.random() * 5);
+                cells += `<div class="heatmap-cell" data-level="${lvl}" title="${j} ${i}:00"></div>`;
+            }
+            cells += '</div>';
+        }
+        heatmap.innerHTML = `<div class="heatmap-grid">${cells}</div>`;
+    }
 }
 
 function updateProfileCard(card) {

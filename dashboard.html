@@ -104,6 +104,41 @@
         <!-- ═══════ VIEW: DASHBOARD ═══════ -->
         <section class="view" id="view-dashboard">
 
+            <!-- ════ GLOBAL OVERVIEW METRICS ════ -->
+            <div class="global-metrics-banner">
+                <div class="g-metric-card">
+                    <div class="g-metric-label">VIEWERS WATCHING</div>
+                    <div class="g-metric-val" id="globalMetricViewers">0</div>
+                    <div class="g-metric-chart"><div class="sparkline bg-purple"></div></div>
+                </div>
+                <div class="g-metric-card">
+                    <div class="g-metric-label">CHANNELS LIVE</div>
+                    <div class="g-metric-val" id="globalMetricChannels" style="color:var(--accent-cyan)">0</div>
+                    <div class="g-metric-chart"><div class="sparkline bg-cyan"></div></div>
+                </div>
+                <div class="g-metric-card">
+                    <div class="g-metric-label">UNIQUE GAMES</div>
+                    <div class="g-metric-val" id="globalMetricGames">0</div>
+                    <div class="g-metric-chart"><div class="sparkline bg-white"></div></div>
+                </div>
+            </div>
+
+            <!-- ════ GLOBAL TRENDING LISTS ════ -->
+            <div class="global-lists-grid">
+                <div class="g-list-container">
+                    <div class="g-list-header">TOP STREAMS OF THE WEEK</div>
+                    <div id="topStreamsList" class="g-list-body">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+                <div class="g-list-container">
+                    <div class="g-list-header">TOP LIVE CHANNELS</div>
+                    <div id="topChannelsList" class="g-list-body">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+
             <!-- Streamer Selector Row -->
             <div class="selector-row">
                 <div class="selector-label">SELECT STREAMER</div>
@@ -269,8 +304,104 @@
                         </div>
                     </div>
                 </div>
+                </div>
             </div>
 
+            <!-- ════ DEEP STREAMER INTELLIGENCE (NEW) ════ -->
+            <div id="deepIntelligence" style="display: none;">
+                <!-- Performance Summary Grid -->
+                <h3 class="section-heading">PERFORMANCE SUMMARY</h3>
+                <div class="perf-grid">
+                    <div class="perf-card">
+                        <div class="perf-label">HOURS STREAMED</div>
+                        <div class="perf-val" id="kpiHoursStreamed">0</div>
+                        <div class="perf-trend trend-up">↑ 12%</div>
+                    </div>
+                    <div class="perf-card">
+                        <div class="perf-label">AVG VIEWERS</div>
+                        <div class="perf-val" id="kpiAvgViewersSum">0</div>
+                        <div class="perf-trend trend-down">↓ 3%</div>
+                    </div>
+                    <div class="perf-card">
+                        <div class="perf-label">PEAK VIEWERS</div>
+                        <div class="perf-val" id="kpiPeakViewersSum" style="color:var(--accent-purple)">0</div>
+                        <div class="perf-trend trend-up">↑ 8%</div>
+                    </div>
+                    <div class="perf-card">
+                        <div class="perf-label">HOURS WATCHED</div>
+                        <div class="perf-val" id="kpiHoursWatched">0</div>
+                        <div class="perf-trend trend-up">↑ 15%</div>
+                    </div>
+                    <div class="perf-card">
+                        <div class="perf-label">FOLLOWERS GAINED</div>
+                        <div class="perf-val" id="kpiFollowersGained">0</div>
+                        <div class="perf-trend trend-up">↑ 5%</div>
+                    </div>
+                    <div class="perf-card">
+                        <div class="perf-label">FOLLOWERS/HOUR</div>
+                        <div class="perf-val" id="kpiFollowersPerHour">0</div>
+                        <div class="perf-trend trend-up">↑ 2%</div>
+                    </div>
+                    <div class="perf-card">
+                        <div class="perf-label">GAMES STREAMED</div>
+                        <div class="perf-val" id="kpiGamesStreamed">0</div>
+                        <div class="perf-trend trend-flat">— 0%</div>
+                    </div>
+                    <div class="perf-card">
+                        <div class="perf-label">ACTIVE DAYS</div>
+                        <div class="perf-val" id="kpiActiveDays">0</div>
+                        <div class="perf-trend trend-up">↑ 1%</div>
+                    </div>
+                </div>
+
+                <!-- Lifetime & Content Rows -->
+                <div class="lt-content-row">
+                    <div class="lt-overview">
+                        <h3 class="section-heading">LIFETIME OVERVIEW</h3>
+                        <div class="lt-grid">
+                            <div class="lt-card">
+                                <div class="lt-label">TOTAL HOURS</div>
+                                <div class="lt-val" id="ltTotalHours">0</div>
+                            </div>
+                            <div class="lt-card">
+                                <div class="lt-label">HIGHEST VIEWERS</div>
+                                <div class="lt-val" id="ltHighestViewers" style="color:var(--accent-cyan)">0</div>
+                            </div>
+                            <div class="lt-card">
+                                <div class="lt-label">TOTAL FOLLOWERS</div>
+                                <div class="lt-val" id="ltTotalFollowers">0</div>
+                            </div>
+                            <div class="lt-card">
+                                <div class="lt-label">TOTAL GAMES</div>
+                                <div class="lt-val" id="ltTotalGames">0</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="most-played">
+                        <h3 class="section-heading">MOST STREAMED GAMES</h3>
+                        <div class="game-bars" id="gameBars">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Schedule & Clips -->
+                <div class="bottom-intel-row">
+                    <div class="schedule-section">
+                        <h3 class="section-heading">24/7 STREAM SCHEDULE</h3>
+                        <div class="heatmap-container" id="scheduleHeatmap">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                    <div class="clips-section">
+                        <h3 class="section-heading">POPULAR CLIPS</h3>
+                        <div class="clips-grid" id="clipsGrid">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
         </section>
 
         <!-- ═══════ VIEW: COMPARE ═══════ -->

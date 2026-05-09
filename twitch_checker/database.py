@@ -30,6 +30,41 @@ class ChatSentiment(Base):
     sentiment_score = Column(Float) # -1.0 to 1.0 from VADER
     message_count = Column(Integer) # How many messages analyzed in this chunk
 
+class StreamerProfile(Base):
+    __tablename__ = 'streamer_profiles'
+    
+    id = Column(Integer, primary_key=True)
+    username = Column(String, index=True, unique=True)
+    display_name = Column(String)
+    profile_image_url = Column(String)
+    description = Column(String)
+    broadcaster_type = Column(String) # partner, affiliate, standard
+    created_at = Column(DateTime)
+    last_updated = Column(DateTime, default=datetime.utcnow)
+
+class DailyStats(Base):
+    __tablename__ = 'daily_stats'
+    
+    id = Column(Integer, primary_key=True)
+    username = Column(String, index=True)
+    date = Column(DateTime, index=True)
+    peak_viewers = Column(Integer)
+    avg_viewers = Column(Integer)
+    hours_streamed = Column(Float)
+    followers_gained = Column(Integer)
+    primary_game = Column(String)
+
+class StreamClip(Base):
+    __tablename__ = 'stream_clips'
+    
+    id = Column(String, primary_key=True) # Twitch clip ID
+    username = Column(String, index=True)
+    title = Column(String)
+    view_count = Column(Integer)
+    created_at = Column(DateTime)
+    thumbnail_url = Column(String)
+    embed_url = Column(String)
+
 Base.metadata.create_all(engine)
 SessionLocal = sessionmaker(bind=engine)
 
