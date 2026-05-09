@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import os
+import re
 import secrets
 import threading
 import time
@@ -13,47 +15,55 @@ from typing import Any
 
 import requests
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 
 try:
-    from database import log_stream_snapshot, get_recent_snapshots, log_chat_sentiment
-    from ml_models import predict_peak_viewers, analyze_chat_sentiment, get_streamer_archetype, calculate_similarity
+    from .database import get_recent_snapshots, log_chat_sentiment, log_stream_snapshot
+    from .ml_models import analyze_chat_sentiment, predict_peak_viewers
+
+    ML_AVAILABLE = True
 except ImportError:
-    pass
+    try:
+        from database import get_recent_snapshots, log_chat_sentiment, log_stream_snapshot
+        from ml_models import analyze_chat_sentiment, predict_peak_viewers
+
+        ML_AVAILABLE = True
+    except ImportError:
+        ML_AVAILABLE = False
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PACKAGE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
 CONFIG_PATH = PACKAGE_DIR / "config.json"
 SAMPLE_CONFIG_PATH = PACKAGE_DIR / "config.sample.json"
 DATA_DIR = BASE_DIR / "data"
 STATE_PATH = DATA_DIR / "stream_state.json"
+
 DEFAULT_TIMEOUT = 12
 TWITCH_OAUTH_URL = "https://id.twitch.tv/oauth2/token"
 TWITCH_API_BASE = "https://api.twitch.tv/helix"
 DEFAULT_ALERT_THRESHOLDS = [1000, 5000, 10000, 25000, 50000, 100000]
 DEFAULT_STREAMERS = [
     "kaicenat",
-    "xqc",
     "pokimane",
+    "caseoh_",
     "fanum",
+    "tarik",
     "hasanabi",
     "shroud",
-    "asmongold",
-    "ninja",
-    "caseoh_",
-    "tarik",
+    "xqc",
     "mizkif",
-    "ironmouse",
-    "caedrel",
     "nmplol",
+    "asmongold",
     "lirik",
 ]
 DEFAULT_GROUPS = {
-    "🏆 Kings":    ["kaicenat", "xqc", "ninja"],
-    "🎮 Gaming":   ["shroud", "tarik", "caedrel", "asmongold", "lirik"],
-    "🎙️ Variety":  ["fanum", "caseoh_", "mizkif", "nmplol"],
-    "🌟 Creators": ["pokimane", "hasanabi", "ironmouse"],
+    "AMP": ["kaicenat", "fanum"],
+    "Creators": ["pokimane", "hasanabi", "mizkif", "nmplol"],
+    "FPS": ["tarik", "shroud", "xqc"],
+    "Variety": ["caseoh_", "asmongold", "lirik"],
 }
+LOGIN_RE = re.compile(r"^[a-z0-9_]{3,25}$")
 
 
 def utc_now() -> datetime:
@@ -73,16 +83,6 @@ def parse_timestamp(value: str | None) -> datetime | None:
         return None
 
 
-def format_uptime(started_at: str | None) -> str:
-    started = parse_timestamp(started_at)
-    if not started:
-        return "Offline"
-
-    elapsed = utc_now() - started
-    minutes = max(int(elapsed.total_seconds() // 60), 0)
-    return format_minutes(minutes)
-
-
 def format_minutes(minutes: int) -> str:
     hours, mins = divmod(max(minutes, 0), 60)
     if hours >= 24:
@@ -91,6 +91,14 @@ def format_minutes(minutes: int) -> str:
     if hours:
         return f"{hours}h {mins}m"
     return f"{mins}m"
+
+
+def format_uptime(started_at: str | None) -> str:
+    started = parse_timestamp(started_at)
+    if not started:
+        return "Offline"
+    elapsed = utc_now() - started
+    return format_minutes(int(elapsed.total_seconds() // 60))
 
 
 def duration_minutes(started_at: str | None, ended_at: str | None = None) -> int:
@@ -117,11 +125,7 @@ def load_json_file(path: Path) -> dict[str, Any]:
 
 
 def load_dotenv_candidates() -> None:
-    candidates = [
-        BASE_DIR / ".env",
-        BASE_DIR.parent / ".env",
-        Path.cwd() / ".env",
-    ]
+    candidates = [BASE_DIR / ".env", BASE_DIR.parent / ".env", Path.cwd() / ".env"]
     seen: set[Path] = set()
     for candidate in candidates:
         resolved = candidate.resolve()
@@ -139,17 +143,19 @@ def parse_int(value: Any, default: int) -> int:
         return default
 
 
+def normalize_login(value: Any) -> str:
+    login = str(value or "").strip().lower().lstrip("@")
+    return login if LOGIN_RE.fullmatch(login) else ""
+
+
 def parse_streamers(raw: str | list[str] | None) -> list[str]:
     if raw is None:
         return DEFAULT_STREAMERS.copy()
-    if isinstance(raw, list):
-        items = raw
-    else:
-        items = [item.strip() for item in raw.split(",")]
+    items = raw if isinstance(raw, list) else [item.strip() for item in str(raw).split(",")]
     normalized: list[str] = []
     seen: set[str] = set()
     for item in items:
-        login = item.strip().lower().lstrip("@")
+        login = normalize_login(item)
         if login and login not in seen:
             seen.add(login)
             normalized.append(login)
@@ -187,7 +193,7 @@ def safe_average(values: list[int]) -> int:
 def compact_text(value: str, limit: int = 120) -> str:
     if len(value) <= limit:
         return value
-    return value[: limit - 1].rstrip() + "…"
+    return value[: limit - 1].rstrip() + "..."
 
 
 def sort_take(items: list[dict[str, Any]], key: str, limit: int = 5) -> list[dict[str, Any]]:
@@ -210,6 +216,7 @@ class AppConfig:
     frontend_title: str
     flask_secret_key: str
 
+    @property
     def is_configured(self) -> bool:
         return (
             bool(self.client_id)
@@ -219,25 +226,25 @@ class AppConfig:
         )
 
     def save_to_file(self) -> None:
-        try:
-            config_data = load_json_file(CONFIG_PATH)
-            config_data["streamers"] = self.streamers
-            config_data["streamer_groups"] = self.streamer_groups
-            # Preserve other fields
-            config_data["client_id"] = self.client_id
-            config_data["client_secret"] = self.client_secret
-            config_data["check_interval"] = self.check_interval
-            config_data["discord_webhook"] = self.discord_webhook
-            config_data["enable_discord_notifications"] = self.enable_discord_notifications
-            config_data["history_limit"] = self.history_limit
-            config_data["snapshot_limit"] = self.snapshot_limit
-            config_data["event_limit"] = self.event_limit
-            config_data["alert_thresholds"] = self.alert_thresholds
-            config_data["frontend_title"] = self.frontend_title
-
-            CONFIG_PATH.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
-        except Exception as exc:
-            logging.error(f"Failed to save config: {exc}")
+        file_config = load_json_file(CONFIG_PATH)
+        payload = {
+            "client_id": file_config.get("client_id", self.client_id),
+            "client_secret": file_config.get("client_secret", self.client_secret),
+            "streamers": self.streamers,
+            "streamer_groups": self.streamer_groups,
+            "check_interval": self.check_interval,
+            "discord_webhook": file_config.get("discord_webhook", self.discord_webhook),
+            "enable_discord_notifications": file_config.get(
+                "enable_discord_notifications",
+                self.enable_discord_notifications,
+            ),
+            "history_limit": self.history_limit,
+            "snapshot_limit": self.snapshot_limit,
+            "event_limit": self.event_limit,
+            "alert_thresholds": self.alert_thresholds,
+            "frontend_title": self.frontend_title,
+        }
+        CONFIG_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def load_config() -> AppConfig:
@@ -245,10 +252,8 @@ def load_config() -> AppConfig:
 
     file_config = load_json_file(CONFIG_PATH)
     if not CONFIG_PATH.exists() and SAMPLE_CONFIG_PATH.exists():
-        CONFIG_PATH.write_text(
-            SAMPLE_CONFIG_PATH.read_text(encoding="utf-8"),
-            encoding="utf-8",
-        )
+        CONFIG_PATH.write_text(SAMPLE_CONFIG_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+        file_config = load_json_file(CONFIG_PATH)
 
     streamers = parse_streamers(os.getenv("TWITCH_STREAMERS", file_config.get("streamers")))
     streamer_groups = normalize_groups(file_config.get("streamer_groups"), streamers)
@@ -261,10 +266,7 @@ def load_config() -> AppConfig:
         check_interval=max(parse_int(os.getenv("CHECK_INTERVAL", file_config.get("check_interval", 60)), 60), 15),
         discord_webhook=os.getenv("DISCORD_WEBHOOK", file_config.get("discord_webhook", "")).strip(),
         enable_discord_notifications=str(
-            os.getenv(
-                "ENABLE_DISCORD_NOTIFICATIONS",
-                file_config.get("enable_discord_notifications", False),
-            )
+            os.getenv("ENABLE_DISCORD_NOTIFICATIONS", file_config.get("enable_discord_notifications", False))
         ).lower() in {"1", "true", "yes", "on"},
         history_limit=max(parse_int(os.getenv("HISTORY_LIMIT", file_config.get("history_limit", 12)), 12), 1),
         snapshot_limit=max(parse_int(os.getenv("SNAPSHOT_LIMIT", file_config.get("snapshot_limit", 72)), 72), 12),
@@ -273,8 +275,8 @@ def load_config() -> AppConfig:
             os.getenv("ALERT_THRESHOLDS", file_config.get("alert_thresholds")),
             DEFAULT_ALERT_THRESHOLDS,
         ),
-        frontend_title=os.getenv("FRONTEND_TITLE", file_config.get("frontend_title", "Twitch Live Radar")).strip()
-        or "Twitch Live Radar",
+        frontend_title=os.getenv("FRONTEND_TITLE", file_config.get("frontend_title", "Twitch Live Command")).strip()
+        or "Twitch Live Command",
         flask_secret_key=os.getenv("FLASK_SECRET_KEY", secrets.token_urlsafe(32)),
     )
 
@@ -299,9 +301,7 @@ class StreamStateStore:
         self.path.write_text(json.dumps(self.state, indent=2), encoding="utf-8")
 
     def _trim_tail(self, items: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
-        if len(items) <= limit:
-            return items
-        return items[-limit:]
+        return items if len(items) <= limit else items[-limit:]
 
     def recent_sessions(self, login: str, limit: int) -> list[dict[str, Any]]:
         history = self.state.get("history", {}).get(login, [])
@@ -314,7 +314,7 @@ class StreamStateStore:
     def recent_events(self, limit: int) -> list[dict[str, Any]]:
         return list(reversed(self.state.get("events", [])[-limit:]))
 
-    def _calculate_base_analytics(self, login: str, current_card: dict[str, Any]) -> dict[str, Any]:
+    def analytics_for_login(self, login: str, current_card: dict[str, Any]) -> dict[str, Any]:
         history = self.state.get("history", {}).get(login, [])
         snapshots = self.state.get("snapshots", {}).get(login, [])
         current_state = self.state.get("streams", {}).get(login, {})
@@ -376,15 +376,6 @@ class StreamStateStore:
             "current_peak_viewers": current_state.get("peak_viewers", current_card.get("viewer_count", 0)),
         }
 
-    def analytics_for_login(self, login: str, current_card: dict[str, Any]) -> dict[str, Any]:
-        analytics = self._calculate_base_analytics(login, current_card)
-        try:
-            analytics["archetype"] = get_streamer_archetype(analytics)
-        except NameError:
-            analytics["archetype"] = {"id": "unknown", "name": "Analyzing...", "desc": "Still gathering data behavior patterns."}
-        return analytics
-
-
     def update(
         self,
         *,
@@ -412,8 +403,8 @@ class StreamStateStore:
 
             if is_live:
                 session_started_at = started_at or previous.get("session_started_at") or now_iso
-                prev_peak = parse_int(previous.get("peak_viewers", 0), 0)
-                peak_viewers = max(prev_peak, viewer_count)
+                previous_peak = parse_int(previous.get("peak_viewers", 0), 0)
+                peak_viewers = max(previous_peak, viewer_count)
                 viewer_sum = parse_int(previous.get("viewer_sum", 0), 0) + viewer_count
                 snapshot_count = parse_int(previous.get("snapshot_count", 0), 0) + 1
 
@@ -439,7 +430,7 @@ class StreamStateStore:
                         )
                     )
 
-                crossed = self._crossed_threshold(prev_peak, peak_viewers, thresholds)
+                crossed = self._crossed_threshold(previous_peak, peak_viewers, thresholds)
                 if crossed:
                     generated_events.append(
                         self._build_event(
@@ -536,15 +527,14 @@ class StreamStateStore:
         severity: str,
         extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        timestamp = utc_now_iso()
         payload = {
-            "id": f"{event_type}:{login}:{timestamp}",
+            "id": f"{event_type}:{login}:{utc_now_iso()}",
             "type": event_type,
             "login": login,
             "display_name": display_name,
             "message": message,
             "severity": severity,
-            "created_at": timestamp,
+            "created_at": utc_now_iso(),
         }
         if extra:
             payload.update(extra)
@@ -559,15 +549,39 @@ class TwitchService:
         self.access_token = ""
         self.token_expires_at = 0.0
         self.state_store = StreamStateStore(STATE_PATH)
+        self._cache_lock = threading.Lock()
+        self._dashboard_cache: dict[str, Any] | None = None
+        self._dashboard_cached_at = 0.0
 
     def config_error(self) -> str | None:
         if self.config.is_configured:
             return None
         return "Twitch credentials are missing. Add them to twitch_checker/config.json or .env."
 
+    def cache_age_seconds(self) -> int | None:
+        if not self._dashboard_cached_at:
+            return None
+        return int(max(time.time() - self._dashboard_cached_at, 0))
+
+    def cache_status(self) -> dict[str, Any]:
+        age_seconds = self.cache_age_seconds()
+        ttl_seconds = max(min(self.config.check_interval, 120), 15)
+        return {
+            "age_seconds": age_seconds,
+            "ttl_seconds": ttl_seconds,
+            "is_warm": self._dashboard_cache is not None,
+            "is_fresh": age_seconds is not None and age_seconds < ttl_seconds,
+        }
+
+    def invalidate_cache(self) -> None:
+        with self._cache_lock:
+            self._dashboard_cache = None
+            self._dashboard_cached_at = 0.0
+
     def ensure_token(self, force_refresh: bool = False) -> None:
-        if self.config_error():
-            raise RuntimeError(self.config_error())
+        error = self.config_error()
+        if error:
+            raise RuntimeError(error)
 
         if not force_refresh and self.access_token and time.time() < self.token_expires_at:
             return
@@ -614,12 +628,715 @@ class TwitchService:
         response.raise_for_status()
         return response.json()
 
-    def get_dashboard(self, logins: list[str] | None = None) -> dict[str, Any]:
+    def get_config(self) -> dict[str, Any]:
+        return {
+            "title": self.config.frontend_title,
+            "check_interval": self.config.check_interval,
+            "streamers": self.config.streamers,
+            "streamer_groups": self.config.streamer_groups,
+            "history_limit": self.config.history_limit,
+            "snapshot_limit": self.config.snapshot_limit,
+            "alert_thresholds": self.config.alert_thresholds,
+        }
+
+    def get_command_center(self) -> dict[str, Any]:
+        error = self.config_error()
+        if error:
+            return self._build_command_center_fallback(error)
+        dashboard = self.get_dashboard()
+        return self._build_command_center(dashboard)
+
+    def get_anomaly_summary(self, logins: list[str] | None = None) -> dict[str, Any]:
+        error = self.config_error()
+        if error:
+            tracked_logins = parse_streamers(logins or self.config.streamers)
+            return {
+                "generated_at": utc_now_iso(),
+                "tracked": len(tracked_logins),
+                "active_anomalies": [],
+                "recent_events": [],
+                "counts": {"high": 0, "medium": 0, "watch": 0},
+            }
+
+        dashboard = self.get_dashboard(logins)
+        alerts = dashboard.get("alerts", [])
+        streamers = dashboard.get("streamers", [])
+
+        anomalies: list[dict[str, Any]] = []
+        for streamer in streamers:
+            analytics = streamer.get("analytics", {})
+            trend_score = analytics.get("trend_score", 0)
+            consistency = analytics.get("consistency_score", 0)
+            best_peak = analytics.get("best_peak_viewers", 0)
+            current = streamer.get("viewer_count", 0)
+            live = streamer.get("is_live", False)
+
+            severity = None
+            reason = None
+            if live and trend_score >= 150:
+                severity = "high"
+                reason = f"Trend score is elevated at {trend_score}."
+            elif live and best_peak and current >= int(best_peak * 0.9):
+                severity = "medium"
+                reason = f"Current viewers are near the historical peak of {best_peak:,}."
+            elif not live and consistency >= 75:
+                severity = "watch"
+                reason = f"High-consistency channel is currently offline after {analytics.get('session_count', 0)} tracked sessions."
+
+            if severity and reason:
+                anomalies.append(
+                    {
+                        "login": streamer["login"],
+                        "display_name": streamer["display_name"],
+                        "severity": severity,
+                        "reason": reason,
+                        "viewer_count": current,
+                        "trend_score": trend_score,
+                        "consistency_score": consistency,
+                    }
+                )
+
+        return {
+            "generated_at": dashboard["generated_at"],
+            "tracked": dashboard.get("summary", {}).get("tracked", 0),
+            "active_anomalies": anomalies[:8],
+            "recent_events": alerts[:8],
+            "counts": {
+                "high": sum(1 for item in anomalies if item["severity"] == "high"),
+                "medium": sum(1 for item in anomalies if item["severity"] == "medium"),
+                "watch": sum(1 for item in anomalies if item["severity"] == "watch"),
+            },
+        }
+
+    def get_streams_payload(
+        self,
+        only_live: bool = False,
+        embed_parent: str = "localhost",
+    ) -> dict[str, Any]:
+        """Lightweight stream cards for live/embed-focused frontends."""
+        dashboard = self.get_dashboard()
+        cards = dashboard.get("streamers", [])
+        if only_live:
+            cards = [card for card in cards if card.get("is_live")]
+
+        cards = sorted(
+            cards,
+            key=lambda card: (
+                1 if card.get("is_live") else 0,
+                card.get("viewer_count", 0),
+            ),
+            reverse=True,
+        )
+
+        parent = embed_parent or "localhost"
+        streams: list[dict[str, Any]] = []
+        for card in cards:
+            login = card["login"]
+            analytics = card.get("analytics", {})
+            streams.append(
+                {
+                    "login": login,
+                    "display_name": card["display_name"],
+                    "is_live": card.get("is_live", False),
+                    "title": card.get("title", ""),
+                    "game_name": card.get("game_name", "") or "Offline",
+                    "viewer_count": card.get("viewer_count", 0),
+                    "uptime": card.get("uptime", "Offline"),
+                    "started_at": card.get("started_at"),
+                    "profile_image_url": card.get("profile_image_url", ""),
+                    "thumbnail_url": card.get("thumbnail_url", ""),
+                    "url": card.get("url", f"https://www.twitch.tv/{login}"),
+                    "embed_url": (
+                        f"https://player.twitch.tv/?channel={login}"
+                        f"&parent={parent}&autoplay=false&muted=true"
+                    ),
+                    "chat_url": (
+                        f"https://www.twitch.tv/embed/{login}/chat"
+                        f"?parent={parent}&darkpopout"
+                    ),
+                    "groups": card.get("groups", []),
+                    "trend_score": analytics.get("trend_score", 0),
+                    "best_peak_viewers": analytics.get("best_peak_viewers", 0),
+                    "consistency_score": analytics.get("consistency_score", 0),
+                    "recent_snapshots": card.get("recent_snapshots", []),
+                }
+            )
+
+        return {
+            "generated_at": dashboard.get("generated_at", utc_now_iso()),
+            "summary": dashboard.get("summary", {}),
+            "embed_parent": parent,
+            "streams": streams,
+        }
+
+    def get_embed_descriptor(self, login: str, embed_parent: str = "localhost") -> dict[str, Any]:
+        normalized = normalize_login(login)
+        if not normalized:
+            raise ValueError("invalid_login")
+        parent = embed_parent or "localhost"
+        return {
+            "login": normalized,
+            "embed_parent": parent,
+            "player_url": (
+                f"https://player.twitch.tv/?channel={normalized}"
+                f"&parent={parent}&autoplay=true&muted=false"
+            ),
+            "chat_url": (
+                f"https://www.twitch.tv/embed/{normalized}/chat"
+                f"?parent={parent}&darkpopout"
+            ),
+            "channel_url": f"https://www.twitch.tv/{normalized}",
+        }
+
+    def get_compare_summary(self, logins: list[str]) -> dict[str, Any]:
+        compared = self.compare_streamers(logins)
+        streamers = compared.get("streamers", [])
+        if not streamers:
+            return {
+                "generated_at": compared["generated_at"],
+                "streamers": [],
+                "leaders": {},
+                "summary": {"tracked": 0, "live": 0, "avg_trend_score": 0},
+            }
+
+        leaders = {
+            "live_viewers": max(streamers, key=lambda item: item.get("viewer_count", 0)),
+            "peak_viewers": max(streamers, key=lambda item: item.get("best_peak_viewers", 0)),
+            "consistency": max(streamers, key=lambda item: item.get("consistency_score", 0)),
+            "momentum": max(streamers, key=lambda item: item.get("trend_score", 0)),
+        }
+        return {
+            "generated_at": compared["generated_at"],
+            "streamers": streamers,
+            "leaders": leaders,
+            "summary": {
+                "tracked": len(streamers),
+                "live": sum(1 for item in streamers if item.get("is_live")),
+                "avg_trend_score": round(sum(item.get("trend_score", 0) for item in streamers) / len(streamers)),
+                "avg_consistency_score": round(sum(item.get("consistency_score", 0) for item in streamers) / len(streamers)),
+            },
+        }
+
+    def get_api_schema(self) -> dict[str, Any]:
+        return {
+            "openapi": "3.0.0",
+            "info": {
+                "title": "Audience Operations API",
+                "version": "1.1.0",
+                "description": "Backend API for Twitch watchlist analytics, command-center summaries, and frontend workspace integration.",
+            },
+            "servers": [{"url": "/"}],
+            "paths": {
+                "/api/health": {"get": {"summary": "Health and cache status"}},
+                "/api/config": {"get": {"summary": "Frontend/runtime configuration"}},
+                "/api/dashboard": {"get": {"summary": "Full dashboard payload"}},
+                "/api/command-center": {"get": {"summary": "Derived operational posture and summaries"}},
+                "/api/workspace": {"get": {"summary": "Bundled frontend bootstrap payload"}},
+                "/api/anomalies": {"get": {"summary": "Derived anomaly and recent event summary"}},
+                "/api/compare/summary": {"get": {"summary": "Comparison summary and leaders for selected streamers"}},
+                "/api/streams": {"get": {"summary": "Lightweight stream cards with Twitch embed URLs"}},
+                "/api/streams/embed/{login}": {"get": {"summary": "Twitch player/chat embed descriptor"}},
+                "/api/openapi.json": {"get": {"summary": "Machine-readable API schema"}},
+            },
+            "components": {
+                "schemas": {
+                    "WorkspaceBundle": {
+                        "type": "object",
+                        "properties": {
+                            "payload_version": {"type": "string"},
+                            "config": {"type": "object"},
+                            "health": {"type": "object"},
+                            "dashboard": {"type": "object"},
+                            "command_center": {"type": "object"},
+                            "selected_streamer": {"type": ["object", "null"]},
+                            "integration": {"type": "object"},
+                        },
+                    },
+                    "CommandCenter": {
+                        "type": "object",
+                        "properties": {
+                            "posture": {"type": "string"},
+                            "posture_score": {"type": "number"},
+                            "operation_brief": {"type": "string"},
+                            "system_checks": {"type": "array"},
+                            "risk_register": {"type": "array"},
+                            "zone_status": {"type": "array"},
+                            "watchlist_pulse": {"type": "array"},
+                            "event_counts": {"type": "object"},
+                        },
+                    },
+                }
+            },
+        }
+
+    def get_workspace_bundle(self, selected_login: str | None = None, force_refresh: bool = False) -> dict[str, Any]:
+        cache = self.cache_status()
+        health = {
+            "ok": True,
+            "configured": self.config_error() is None,
+            "error": self.config_error(),
+            "generated_at": utc_now_iso(),
+            "cache_age_seconds": self.cache_age_seconds(),
+            "cache_ttl_seconds": cache["ttl_seconds"],
+            "cache_is_warm": cache["is_warm"],
+            "cache_is_fresh": cache["is_fresh"],
+        }
+
+        if health["configured"]:
+            dashboard = self.get_dashboard(force_refresh=force_refresh)
+            command_center = self._build_command_center(dashboard)
+        else:
+            dashboard = {
+                "generated_at": utc_now_iso(),
+                "title": self.config.frontend_title,
+                "check_interval": self.config.check_interval,
+                "summary": {
+                    "tracked": len(self.config.streamers),
+                    "live": 0,
+                    "offline": len(self.config.streamers),
+                    "current_viewers": 0,
+                },
+                "overview": {"dominant_category": "Awaiting data"},
+                "group_summary": [],
+                "leaderboards": {"live_now": [], "best_peak": [], "most_active": [], "trend": []},
+                "category_mix": [],
+                "alerts": [],
+                "streamers": [],
+                "compare_defaults": self.config.streamers[: min(4, len(self.config.streamers))],
+            }
+            command_center = self._build_command_center_fallback(health["error"] or "Configuration required.")
+
+        normalized_login = normalize_login(selected_login) if selected_login else ""
+        selected_stream = None
+        if normalized_login:
+            try:
+                selected_stream = self.get_stream(normalized_login) if health["configured"] else None
+            except (ValueError, RuntimeError, requests.RequestException):
+                selected_stream = None
+        if not selected_stream and dashboard.get("streamers"):
+            selected_stream = dashboard["streamers"][0]
+
+        return {
+            "generated_at": utc_now_iso(),
+            "payload_version": "workspace.v1",
+            "config": self.get_config(),
+            "health": health,
+            "dashboard": dashboard,
+            "command_center": command_center,
+            "anomaly_summary": self.get_anomaly_summary(self.config.streamers if health["configured"] else None),
+            "selected_streamer": selected_stream,
+            "integration": {
+                "recommended_refresh_seconds": self.config.check_interval,
+                "supports_search": health["configured"],
+                "supports_forecast": ML_AVAILABLE,
+                "supports_anomaly_summary": True,
+                "supports_compare_summary": True,
+                "api_schema": "/api/openapi.json",
+                "primary_routes": {
+                    "workspace": "/api/workspace",
+                    "dashboard": "/api/dashboard",
+                    "command_center": "/api/command-center",
+                    "anomalies": "/api/anomalies",
+                    "compare_summary": "/api/compare/summary?logins=<comma-separated-logins>",
+                    "streams": "/api/streams",
+                    "stream_embed": "/api/streams/embed/<login>",
+                    "history": "/api/history/<login>",
+                    "prediction": "/api/ml/predict/<login>",
+                },
+            },
+        }
+
+    def get_dashboard(self, logins: list[str] | None = None, force_refresh: bool = False) -> dict[str, Any]:
+        requested_logins = parse_streamers(logins or self.config.streamers)
+        if not requested_logins:
+            requested_logins = self.config.streamers
+
+        tracked_set = set(self.config.streamers)
+        uses_tracked_subset = set(requested_logins).issubset(tracked_set)
+
+        if uses_tracked_subset:
+            base_dashboard = self._get_cached_dashboard(force_refresh=force_refresh)
+            if requested_logins == self.config.streamers:
+                return copy.deepcopy(base_dashboard)
+            return self._slice_dashboard(base_dashboard, requested_logins)
+
+        return self._build_dashboard(requested_logins)
+
+    def get_stream(self, login: str) -> dict[str, Any]:
+        if not login:
+            raise ValueError("invalid_login")
+        dashboard = self.get_dashboard([login])
+        return dashboard["streamers"][0]
+
+    def get_analytics_stream(self, login: str) -> dict[str, Any]:
+        if not login:
+            raise ValueError("invalid_login")
+        stream = self.get_stream(login)
+        return {
+            "login": stream["login"],
+            "display_name": stream["display_name"],
+            "analytics": stream["analytics"],
+            "recent_sessions": stream["recent_sessions"],
+            "recent_snapshots": stream["recent_snapshots"],
+        }
+
+    def compare_streamers(self, logins: list[str]) -> dict[str, Any]:
+        dashboard = self.get_dashboard(logins)
+        compared = []
+        for card in dashboard["streamers"]:
+            analytics = card["analytics"]
+            compared.append(
+                {
+                    "login": card["login"],
+                    "display_name": card["display_name"],
+                    "is_live": card["is_live"],
+                    "viewer_count": card["viewer_count"],
+                    "session_count": analytics["session_count"],
+                    "avg_duration_minutes": analytics["avg_duration_minutes"],
+                    "best_peak_viewers": analytics["best_peak_viewers"],
+                    "avg_peak_viewers": analytics["avg_peak_viewers"],
+                    "trend_score": analytics["trend_score"],
+                    "top_category": analytics["top_category"],
+                    "consistency_score": analytics["consistency_score"],
+                }
+            )
+        return {"generated_at": dashboard["generated_at"], "streamers": compared}
+
+    def search_streamers(self, query: str) -> list[dict[str, Any]]:
+        search_query = str(query or "").strip()
+        if len(search_query) < 2:
+            return []
+
+        payload = self._request("search/channels", [("query", search_query), ("first", "8")])
+        results: list[dict[str, Any]] = []
+        for item in payload.get("data", []):
+            login = normalize_login(item.get("broadcaster_login"))
+            if not login:
+                continue
+            results.append(
+                {
+                    "login": login,
+                    "display_name": item.get("display_name", login),
+                    "profile_image_url": item.get("thumbnail_url", ""),
+                    "game_name": item.get("game_name") or "Offline",
+                    "is_live": bool(item.get("is_live")),
+                    "is_tracked": login in self.config.streamers,
+                }
+            )
+        return results
+
+    def add_streamer(self, login: str) -> dict[str, Any]:
+        normalized = normalize_login(login)
+        if not normalized:
+            raise ValueError("invalid_login")
+        if normalized in self.config.streamers:
+            raise ValueError("already_tracked")
+
+        users = self._fetch_users([normalized])
+        if normalized not in users:
+            raise ValueError("not_found")
+
+        self.config.streamers.append(normalized)
+        self.config.streamer_groups = normalize_groups(self.config.streamer_groups, self.config.streamers)
+        self.config.streamer_groups.setdefault("Featured", [])
+        if normalized not in self.config.streamer_groups["Featured"]:
+            self.config.streamer_groups["Featured"].append(normalized)
+        self.config.save_to_file()
+        self.invalidate_cache()
+        return self.get_config()
+
+    def remove_streamer(self, login: str) -> dict[str, Any]:
+        normalized = normalize_login(login)
+        if not normalized or normalized not in self.config.streamers:
+            raise ValueError("not_tracked")
+
+        self.config.streamers = [streamer for streamer in self.config.streamers if streamer != normalized]
+        self.config.streamer_groups = {
+            group: [member for member in members if member != normalized]
+            for group, members in self.config.streamer_groups.items()
+        }
+        self.config.streamer_groups = normalize_groups(self.config.streamer_groups, self.config.streamers)
+        self.config.save_to_file()
+        self.invalidate_cache()
+        return self.get_config()
+
+    def prediction_data_for_login(self, login: str, limit: int = 60) -> list[dict[str, Any]]:
+        snapshots = get_recent_snapshots(login, limit) if ML_AVAILABLE else []
+        if len(snapshots) >= 5:
+            return snapshots
+
+        fallback = self.state_store.recent_snapshots(login, limit)
+        if fallback:
+            return [
+                {
+                    "timestamp": item["timestamp"],
+                    "viewer_count": item.get("viewers", 0),
+                    "game_name": item.get("game_name", ""),
+                    "title": item.get("title", ""),
+                }
+                for item in fallback
+            ]
+        return snapshots
+
+    def _build_command_center_fallback(self, error: str) -> dict[str, Any]:
+        watchlist_size = len(self.config.streamers)
+        checks = [
+            {"name": "Twitch credentials", "status": "blocked", "detail": error},
+            {
+                "name": "Watchlist scope",
+                "status": "healthy" if watchlist_size else "watch",
+                "detail": f"{watchlist_size} tracked creators are configured locally.",
+            },
+            {
+                "name": "Forecast layer",
+                "status": "watch",
+                "detail": "Historical forecasting remains available once local session data accumulates.",
+            },
+            {
+                "name": "Discord notifications",
+                "status": "healthy" if self.config.enable_discord_notifications and self.config.discord_webhook else "watch",
+                "detail": "Webhook is configured." if self.config.enable_discord_notifications and self.config.discord_webhook else "Notifications are optional and currently inactive.",
+            },
+        ]
+        return {
+            "generated_at": utc_now_iso(),
+            "posture": "Credential Mode",
+            "posture_score": 16,
+            "operation_brief": "The dashboard is in credential mode. The layout stays usable, but live Twitch telemetry, search, and live-event scoring are waiting on a client ID and secret.",
+            "system_checks": checks,
+            "risk_register": [
+                {
+                    "name": "Telemetry blocked",
+                    "status": "high",
+                    "detail": "Without Twitch credentials, the watchlist cannot pull live status or audience counts.",
+                }
+            ],
+            "zone_status": [
+                {"name": "Overview", "status": "watch", "detail": "Presentation mode is active with placeholder summary values."},
+                {"name": "Operations", "status": "watch", "detail": "Forecast and player remain visible, but live operations are offline."},
+                {"name": "Analysis", "status": "watch", "detail": "Historical analytics improve as local tracking data accumulates."},
+                {"name": "Archive", "status": "healthy", "detail": "Stored local state can still power sessions, events, and fallback archive views."},
+            ],
+            "watchlist_pulse": [
+                {
+                    "login": login,
+                    "display_name": login,
+                    "status": "standby",
+                    "value": 0,
+                    "detail": "Awaiting live audience data after credentials are added.",
+                }
+                for login in self.config.streamers[:4]
+            ],
+            "event_counts": {"high": 1, "medium": 0, "low": 0},
+        }
+
+    def _build_command_center(self, dashboard: dict[str, Any]) -> dict[str, Any]:
+        alerts = dashboard.get("alerts", [])
+        summary = dashboard.get("summary", {})
+        streamers = dashboard.get("streamers", [])
+
+        high_events = sum(1 for alert in alerts if alert.get("severity") == "high")
+        medium_events = sum(1 for alert in alerts if alert.get("severity") == "medium")
+        low_events = sum(1 for alert in alerts if alert.get("severity") == "low")
+        live_ratio = (summary.get("live", 0) / max(summary.get("tracked", 1), 1)) if summary.get("tracked", 0) else 0
+        viewers = summary.get("current_viewers", 0)
+        top_streamer = max(streamers, key=lambda item: item.get("viewer_count", 0), default=None)
+
+        posture_score = 18
+        posture_score += min(int(live_ratio * 34), 34)
+        posture_score += min(viewers // 6000, 18)
+        posture_score += min(high_events * 16 + medium_events * 7 + low_events * 2, 24)
+        posture_score += 8 if top_streamer and top_streamer.get("is_live") else 0
+        posture_score = max(min(posture_score, 100), 0)
+
+        if posture_score >= 78:
+            posture = "Critical"
+        elif posture_score >= 56:
+            posture = "Elevated"
+        elif posture_score >= 34:
+            posture = "Watch"
+        else:
+            posture = "Nominal"
+
+        system_checks = [
+            {"name": "Twitch credentials", "status": "healthy", "detail": "Authenticated against the Twitch API."},
+            {
+                "name": "Dashboard cache",
+                "status": "healthy" if (self.cache_age_seconds() or 0) <= max(self.config.check_interval * 2, 90) else "watch",
+                "detail": f"Cache age is {self.cache_age_seconds() or 0}s with a {self.config.check_interval}s refresh cadence.",
+            },
+            {
+                "name": "Watchlist coverage",
+                "status": "healthy" if summary.get("tracked", 0) >= 6 else "watch",
+                "detail": f"{summary.get('tracked', 0)} creators are currently tracked across {len(self.config.streamer_groups)} groups.",
+            },
+            {
+                "name": "Alert thresholds",
+                "status": "healthy" if self.config.alert_thresholds else "watch",
+                "detail": f"{len(self.config.alert_thresholds)} milestone thresholds are armed.",
+            },
+            {
+                "name": "Forecast layer",
+                "status": "healthy" if ML_AVAILABLE else "watch",
+                "detail": "Machine-learning forecast helpers are available." if ML_AVAILABLE else "Prediction falls back to stored local history.",
+            },
+            {
+                "name": "Discord notifications",
+                "status": "healthy" if self.config.enable_discord_notifications and self.config.discord_webhook else "watch",
+                "detail": "Webhook dispatch is armed." if self.config.enable_discord_notifications and self.config.discord_webhook else "Webhook dispatch is not active.",
+            },
+        ]
+
+        risk_candidates: list[dict[str, Any]] = []
+        for streamer in streamers:
+            analytics = streamer.get("analytics", {})
+            trend_score = analytics.get("trend_score", 0)
+            consistency = analytics.get("consistency_score", 0)
+            peak = analytics.get("best_peak_viewers", 0)
+            current = streamer.get("viewer_count", 0)
+
+            if streamer.get("is_live") and trend_score >= 140:
+                risk_candidates.append(
+                    {
+                        "name": streamer["display_name"],
+                        "status": "high",
+                        "detail": f"Momentum is running hot at {trend_score} with {current:,} live viewers.",
+                    }
+                )
+            elif streamer.get("is_live") and current and peak and current >= int(peak * 0.85):
+                risk_candidates.append(
+                    {
+                        "name": streamer["display_name"],
+                        "status": "medium",
+                        "detail": f"Current audience is nearing its historical peak at {current:,} viewers.",
+                    }
+                )
+            elif not streamer.get("is_live") and consistency >= 70:
+                risk_candidates.append(
+                    {
+                        "name": streamer["display_name"],
+                        "status": "watch",
+                        "detail": f"Highly consistent creator is currently offline; keep them in the monitoring rotation.",
+                    }
+                )
+
+        for alert in alerts[:3]:
+            risk_candidates.append(
+                {
+                    "name": alert.get("display_name", alert.get("login", "Watchlist event")),
+                    "status": alert.get("severity", "watch"),
+                    "detail": alert.get("message", "Recent event surfaced in the watchlist."),
+                }
+            )
+
+        zone_status = [
+            {
+                "name": "Overview",
+                "status": "healthy" if summary.get("tracked", 0) else "watch",
+                "detail": f"{summary.get('tracked', 0)} creators, {summary.get('live', 0)} live, and {summary.get('current_viewers', 0):,} concurrent viewers.",
+            },
+            {
+                "name": "Operations",
+                "status": "healthy" if summary.get("live", 0) else "watch",
+                "detail": f"{summary.get('live', 0)} live operations with forecast canvas and embedded watch ready.",
+            },
+            {
+                "name": "Analysis",
+                "status": "healthy" if dashboard.get("category_mix") else "watch",
+                "detail": f"{len(dashboard.get('leaderboards', {}).get('trend', []))} ranked momentum entries and {len(dashboard.get('category_mix', []))} active taxonomy buckets.",
+            },
+            {
+                "name": "Archive",
+                "status": "healthy" if alerts else "watch",
+                "detail": f"{len(alerts)} recent events and rolling session history are available for review.",
+            },
+        ]
+
+        pulse_rows = []
+        for streamer in sorted(
+            streamers,
+            key=lambda item: (
+                1 if item.get("is_live") else 0,
+                item.get("analytics", {}).get("trend_score", 0),
+                item.get("viewer_count", 0),
+            ),
+            reverse=True,
+        )[:6]:
+            analytics = streamer.get("analytics", {})
+            pulse_rows.append(
+                {
+                    "login": streamer["login"],
+                    "display_name": streamer["display_name"],
+                    "status": "live" if streamer.get("is_live") else "standby",
+                    "value": streamer.get("viewer_count") or analytics.get("best_peak_viewers", 0),
+                    "detail": (
+                        f"{streamer.get('viewer_count', 0):,} live viewers, trend {analytics.get('trend_score', 0)}"
+                        if streamer.get("is_live")
+                        else f"{analytics.get('session_count', 0)} sessions tracked, consistency {analytics.get('consistency_score', 0)}"
+                    ),
+                }
+            )
+
+        hottest_text = (
+            f"{top_streamer['display_name']} leads the board with {top_streamer.get('viewer_count', 0):,} viewers."
+            if top_streamer and top_streamer.get("is_live")
+            else "No creator is live right now, so the board is leaning on stored behavior and session history."
+        )
+        operation_brief = (
+            f"{hottest_text} "
+            f"{summary.get('live', 0)} of {summary.get('tracked', 0)} tracked creators are active, with "
+            f"{high_events} high-severity and {medium_events} medium-severity recent events shaping posture."
+        )
+
+        return {
+            "generated_at": dashboard.get("generated_at", utc_now_iso()),
+            "posture": posture,
+            "posture_score": posture_score,
+            "operation_brief": operation_brief,
+            "system_checks": system_checks,
+            "risk_register": risk_candidates[:5],
+            "zone_status": zone_status,
+            "watchlist_pulse": pulse_rows,
+            "event_counts": {"high": high_events, "medium": medium_events, "low": low_events},
+        }
+
+    def _get_cached_dashboard(self, force_refresh: bool = False) -> dict[str, Any]:
+        with self._cache_lock:
+            ttl_seconds = max(min(self.config.check_interval, 120), 15)
+            is_fresh = self._dashboard_cache is not None and (time.time() - self._dashboard_cached_at) < ttl_seconds
+            if not force_refresh and is_fresh:
+                return copy.deepcopy(self._dashboard_cache)
+
+            dashboard = self._build_dashboard(self.config.streamers)
+            self._dashboard_cache = dashboard
+            self._dashboard_cached_at = time.time()
+            return copy.deepcopy(dashboard)
+
+    def _slice_dashboard(self, dashboard: dict[str, Any], logins: list[str]) -> dict[str, Any]:
+        by_login = {card["login"]: card for card in dashboard["streamers"]}
+        sliced_cards = [copy.deepcopy(by_login[login]) for login in logins if login in by_login]
+        analytics_map = {card["login"]: card["analytics"] for card in sliced_cards}
+
+        sliced = copy.deepcopy(dashboard)
+        sliced["streamers"] = sliced_cards
+        sliced["summary"] = {
+            "tracked": len(sliced_cards),
+            "live": sum(1 for card in sliced_cards if card["is_live"]),
+            "offline": sum(1 for card in sliced_cards if not card["is_live"]),
+            "current_viewers": sum(card["viewer_count"] for card in sliced_cards if card["is_live"]),
+        }
+        sliced["overview"] = self._build_overview(sliced_cards, analytics_map)
+        sliced["leaderboards"] = self._build_leaderboards(sliced_cards, analytics_map)
+        sliced["group_summary"] = self._build_group_summary(sliced_cards)
+        sliced["category_mix"] = self._build_category_mix(sliced_cards, analytics_map)
+        sliced["compare_defaults"] = logins[: min(4, len(logins))]
+        return sliced
+
+    def _build_dashboard(self, requested_logins: list[str]) -> dict[str, Any]:
         error = self.config_error()
         if error:
             raise RuntimeError(error)
 
-        requested_logins = parse_streamers(logins or self.config.streamers)
         users = self._fetch_users(requested_logins)
         streams = self._fetch_streams(requested_logins)
 
@@ -652,16 +1369,11 @@ class TwitchService:
             if any(event["type"] == "went_live" for event in generated_events):
                 self._send_discord_notification(login, display_name, user, stream)
 
-            try:
-                if is_live:
-                    log_stream_snapshot(login, viewer_count, game_name, title)
-                    # For demo purposes, we will feed a hardcoded chat snippet depending on viewers
-                    # because IRC takes continuous polling.
-                    demo_msgs = ["POG", "w stream", "hype"] if viewer_count > 10000 else ["nice", "hello block"]
-                    sentiment_data = analyze_chat_sentiment(demo_msgs)
-                    log_chat_sentiment(login, sentiment_data['score'], len(demo_msgs))
-            except NameError:
-                pass
+            if ML_AVAILABLE and is_live:
+                log_stream_snapshot(login, viewer_count, game_name, title)
+                demo_messages = ["pog", "w stream", "hype"] if viewer_count > 10000 else ["nice", "steady stream"]
+                sentiment_data = analyze_chat_sentiment(demo_messages)
+                log_chat_sentiment(login, sentiment_data["score"], len(demo_messages))
 
             card = {
                 "login": login,
@@ -688,12 +1400,6 @@ class TwitchService:
             cards.append(card)
             analytics_map[login] = analytics
 
-        overview = self._build_overview(cards, analytics_map)
-        leaderboards = self._build_leaderboards(cards, analytics_map)
-        group_summary = self._build_group_summary(cards)
-        category_mix = self._build_category_mix(cards, analytics_map)
-        compare_defaults = requested_logins[: min(4, len(requested_logins))]
-
         return {
             "generated_at": utc_now_iso(),
             "title": self.config.frontend_title,
@@ -705,121 +1411,13 @@ class TwitchService:
                 "offline": sum(1 for card in cards if not card["is_live"]),
                 "current_viewers": sum(card["viewer_count"] for card in cards if card["is_live"]),
             },
-            "overview": overview,
-            "leaderboards": leaderboards,
-            "group_summary": group_summary,
-            "category_mix": category_mix,
+            "overview": self._build_overview(cards, analytics_map),
+            "leaderboards": self._build_leaderboards(cards, analytics_map),
+            "group_summary": self._build_group_summary(cards),
+            "category_mix": self._build_category_mix(cards, analytics_map),
             "alerts": self.state_store.recent_events(self.config.event_limit),
-            "compare_defaults": compare_defaults,
+            "compare_defaults": requested_logins[: min(4, len(requested_logins))],
         }
-
-    def get_stream(self, login: str) -> dict[str, Any]:
-        dashboard = self.get_dashboard([login])
-        return dashboard["streamers"][0]
-
-    def get_analytics_stream(self, login: str) -> dict[str, Any]:
-        stream = self.get_stream(login)
-        return {
-            "login": stream["login"],
-            "display_name": stream["display_name"],
-            "analytics": stream["analytics"],
-            "recent_sessions": stream["recent_sessions"],
-            "recent_snapshots": stream["recent_snapshots"],
-        }
-
-    def compare_streamers(self, logins: list[str]) -> dict[str, Any]:
-        dashboard = self.get_dashboard(logins)
-        compared = []
-        for card in dashboard["streamers"]:
-            analytics = card["analytics"]
-            compared.append(
-                {
-                    "login": card["login"],
-                    "display_name": card["display_name"],
-                    "is_live": card["is_live"],
-                    "viewer_count": card["viewer_count"],
-                    "session_count": analytics["session_count"],
-                    "avg_duration_minutes": analytics["avg_duration_minutes"],
-                    "best_peak_viewers": analytics["best_peak_viewers"],
-                    "avg_peak_viewers": analytics["avg_peak_viewers"],
-                    "trend_score": analytics["trend_score"],
-                    "top_category": analytics["top_category"],
-                    "consistency_score": analytics["consistency_score"],
-                    "archetype": analytics.get("archetype")
-                }
-            )
-        
-        # Add similarity scores between the first two if applicable
-        if len(compared) >= 2:
-            try:
-                card_a = next(c for c in dashboard["streamers"] if c["login"] == compared[0]["login"])
-                card_b = next(c for c in dashboard["streamers"] if c["login"] == compared[1]["login"])
-                similarity = calculate_similarity(card_a["analytics"], card_b["analytics"])
-                return {"generated_at": dashboard["generated_at"], "streamers": compared, "similarity": similarity}
-            except Exception:
-                pass
-
-        return {"generated_at": dashboard["generated_at"], "streamers": compared}
-
-    def get_config(self) -> dict[str, Any]:
-        return {
-            "streamers": self.config.streamers,
-            "streamer_groups": self.config.streamer_groups,
-            "frontend_title": self.config.frontend_title
-        }
-
-    def search_streamer(self, query: str) -> list[dict[str, Any]]:
-        if not query:
-            return []
-        
-        # Search for users matching the query
-        payload = self._request("search/channels", [("query", query), ("first", "10")])
-        results = []
-        for item in payload.get("data", []):
-            login = item["broadcaster_login"].lower()
-            results.append({
-                "login": login,
-                "display_name": item["display_name"],
-                "profile_image_url": item["thumbnail_url"],
-                "is_live": item["is_live"],
-                "game_name": item["game_name"],
-                "is_tracked": login in self.config.streamers
-            })
-        return results
-
-    def add_streamer(self, login: str) -> bool:
-        login = login.lower().strip()
-        if login in self.config.streamers:
-            return False
-            
-        # Verify user exists on Twitch
-        users = self._fetch_users([login])
-        if login not in users:
-            return False
-            
-        self.config.streamers.append(login)
-        # Add to "Featured" group if it exists, or just leave as is
-        if "Featured" in self.config.streamer_groups:
-            self.config.streamer_groups["Featured"].append(login)
-        else:
-            self.config.streamer_groups.setdefault("Other", []).append(login)
-            
-        self.config.save_to_file()
-        return True
-
-    def remove_streamer(self, login: str) -> bool:
-        login = login.lower().strip()
-        if login not in self.config.streamers:
-            return False
-            
-        self.config.streamers.remove(login)
-        # Remove from groups
-        for group in self.config.streamer_groups.values():
-            if login in group:
-                group.remove(login)
-        
-        self.config.save_to_file()
-        return True
 
     def _fetch_users(self, logins: list[str]) -> dict[str, dict[str, Any]]:
         payload = self._request("users", [("login", login) for login in logins])
@@ -829,11 +1427,7 @@ class TwitchService:
         payload = self._request("streams", [("user_login", login) for login in logins])
         return {item["user_login"].lower(): item for item in payload.get("data", [])}
 
-    def _build_overview(
-        self,
-        cards: list[dict[str, Any]],
-        analytics_map: dict[str, dict[str, Any]],
-    ) -> dict[str, Any]:
+    def _build_overview(self, cards: list[dict[str, Any]], analytics_map: dict[str, dict[str, Any]]) -> dict[str, Any]:
         live_cards = [card for card in cards if card["is_live"]]
         top_live = max(live_cards, key=lambda card: card["viewer_count"], default=None)
         most_consistent = max(
@@ -870,17 +1464,23 @@ class TwitchService:
                 "display_name": top_live["display_name"],
                 "viewer_count": top_live["viewer_count"],
                 "login": top_live["login"],
-            } if top_live else None,
+            }
+            if top_live
+            else None,
             "most_consistent": {
                 "display_name": most_consistent["display_name"],
                 "score": analytics_map[most_consistent["login"]]["consistency_score"],
                 "login": most_consistent["login"],
-            } if most_consistent else None,
+            }
+            if most_consistent
+            else None,
             "biggest_peak": {
                 "display_name": biggest_peak["display_name"],
                 "peak_viewers": analytics_map[biggest_peak["login"]]["best_peak_viewers"],
                 "login": biggest_peak["login"],
-            } if biggest_peak else None,
+            }
+            if biggest_peak
+            else None,
             "hourly_activity": hourly_activity,
             "weekday_activity": weekday_activity,
         }
@@ -1003,225 +1603,213 @@ class TwitchService:
         }
 
         try:
-            response = self.session.post(
-                self.config.discord_webhook,
-                json=content,
-                timeout=DEFAULT_TIMEOUT,
-            )
+            response = self.session.post(self.config.discord_webhook, json=content, timeout=DEFAULT_TIMEOUT)
             response.raise_for_status()
         except requests.RequestException as exc:
             self.logger.warning("Discord notification failed for %s: %s", login, exc)
 
 
 def build_logger() -> logging.Logger:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    )
-    return logging.getLogger("twitch-live-radar")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    return logging.getLogger("audience-signal-lab")
 
 
 def create_app() -> Flask:
-    app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
+    app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
     config = load_config()
     app.config["SECRET_KEY"] = config.flask_secret_key
     app.logger.handlers = build_logger().handlers
     app.logger.setLevel(logging.INFO)
     service = TwitchService(config, app.logger)
 
+    def json_service_response(fn: Any, status_code: int = 200) -> Response:
+        try:
+            return jsonify(fn()), status_code
+        except ValueError as exc:
+            code = str(exc)
+            message_map = {
+                "invalid_login": "A Twitch login should use only letters, numbers, or underscores.",
+                "already_tracked": "That streamer is already in the watchlist.",
+                "not_found": "That Twitch channel could not be found.",
+                "not_tracked": "That streamer is not currently being tracked.",
+            }
+            return jsonify({"error": code, "detail": message_map.get(code, code)}), 400
+        except requests.RequestException as exc:
+            app.logger.exception("Twitch request failed")
+            return jsonify({"error": "twitch_request_failed", "detail": str(exc)}), 502
+        except RuntimeError as exc:
+            return jsonify({"error": "configuration_error", "detail": str(exc)}), 503
+
+    @app.after_request
+    def apply_security_headers(response: Response) -> Response:
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
     @app.get("/")
     def index() -> Any:
+        return send_from_directory(BASE_DIR, "landing.html")
+
+    @app.get("/dashboard")
+    def dashboard_page() -> Any:
         return send_from_directory(BASE_DIR, "dashboard.html")
 
     @app.get("/api/health")
     def health() -> Any:
         error = service.config_error()
-        return jsonify(
-            {
-                "ok": error is None,
-                "configured": error is None,
-                "error": error,
-                "generated_at": utc_now_iso(),
-            }
-        ), (200 if error is None else 503)
+        cache = service.cache_status()
+        status = {
+            "ok": True,
+            "configured": error is None,
+            "error": error,
+            "generated_at": utc_now_iso(),
+            "cache_age_seconds": service.cache_age_seconds(),
+            "cache_ttl_seconds": cache["ttl_seconds"],
+            "cache_is_warm": cache["is_warm"],
+            "cache_is_fresh": cache["is_fresh"],
+        }
+        return jsonify(status), 200
+
+    @app.get("/api/config")
+    def frontend_config() -> Any:
+        return jsonify(service.get_config())
 
     @app.get("/api/dashboard")
     def dashboard() -> Any:
-        logins = parse_streamers(request.args.get("logins")) if request.args.get("logins") else None
-        try:
-            return jsonify(service.get_dashboard(logins))
-        except requests.RequestException as exc:
-            app.logger.exception("Twitch request failed")
-            return jsonify({"error": "twitch_request_failed", "detail": str(exc)}), 502
-        except RuntimeError as exc:
-            return jsonify({"error": "configuration_error", "detail": str(exc)}), 503
+        refresh = request.args.get("refresh") in {"1", "true", "yes"}
+        requested = request.args.get("logins")
+        logins = parse_streamers(requested) if requested else None
+        return json_service_response(lambda: service.get_dashboard(logins, force_refresh=refresh))
+
+    @app.get("/api/command-center")
+    def command_center() -> Any:
+        return jsonify(service.get_command_center())
+
+    @app.get("/api/workspace")
+    def workspace() -> Any:
+        refresh = request.args.get("refresh") in {"1", "true", "yes"}
+        selected_login = request.args.get("selected")
+        return jsonify(service.get_workspace_bundle(selected_login=selected_login, force_refresh=refresh))
+
+    @app.get("/api/anomalies")
+    def anomalies() -> Any:
+        requested = request.args.get("logins")
+        logins = parse_streamers(requested) if requested else None
+        return json_service_response(lambda: service.get_anomaly_summary(logins))
+
+    @app.get("/api/compare/summary")
+    def compare_summary() -> Any:
+        requested = request.args.get("logins")
+        logins = parse_streamers(requested) if requested else config.streamers[:4]
+        return json_service_response(lambda: service.get_compare_summary(logins))
+
+    @app.get("/api/openapi.json")
+    def openapi_schema() -> Any:
+        return jsonify(service.get_api_schema())
 
     @app.get("/api/stream/<login>")
     def stream(login: str) -> Any:
-        try:
-            return jsonify(service.get_stream(login.lower()))
-        except requests.RequestException as exc:
-            app.logger.exception("Twitch request failed")
-            return jsonify({"error": "twitch_request_failed", "detail": str(exc)}), 502
-        except RuntimeError as exc:
-            return jsonify({"error": "configuration_error", "detail": str(exc)}), 503
+        normalized = normalize_login(login)
+        if not normalized:
+            return jsonify({"error": "invalid_login", "detail": "Invalid Twitch login."}), 400
+        return json_service_response(lambda: service.get_stream(normalized))
 
     @app.get("/api/history/<login>")
     def history(login: str) -> Any:
-        normalized = login.lower().strip()
+        normalized = normalize_login(login)
+        if not normalized:
+            return jsonify({"error": "invalid_login", "detail": "Invalid Twitch login."}), 400
         return jsonify(
             {
                 "login": normalized,
-                "recent_sessions": service.state_store.recent_sessions(
-                    normalized,
-                    config.history_limit,
-                ),
-                "recent_snapshots": service.state_store.recent_snapshots(
-                    normalized,
-                    config.snapshot_limit,
-                ),
+                "recent_sessions": service.state_store.recent_sessions(normalized, config.history_limit),
+                "recent_snapshots": service.state_store.recent_snapshots(normalized, config.snapshot_limit),
             }
         )
 
     @app.get("/api/ml/predict/<login>")
     def predict(login: str) -> Any:
-        try:
-            normalized = login.lower().strip()
-            recent_db_snaps = get_recent_snapshots(normalized, 60)
-            if not recent_db_snaps:
-                return jsonify({"status": "no_data_in_db"})
-            
-            prediction = predict_peak_viewers(recent_db_snaps)
-            return jsonify({
-                "login": normalized,
-                "prediction": prediction,
-                "data_points_used": len(recent_db_snaps)
-            })
-        except NameError:
-            return jsonify({"status": "ml_not_enabled"}), 501
+        normalized = normalize_login(login)
+        if not normalized:
+            return jsonify({"error": "invalid_login", "detail": "Invalid Twitch login."}), 400
+        if not ML_AVAILABLE:
+            return jsonify({"status": "ml_not_enabled", "login": normalized}), 501
 
-    @app.get("/api/config")
-    def frontend_config() -> Any:
-        return jsonify(
-            {
-                "title": config.frontend_title,
-                "check_interval": config.check_interval,
-                "streamers": config.streamers,
-                "streamer_groups": config.streamer_groups,
-                "history_limit": config.history_limit,
-                "snapshot_limit": config.snapshot_limit,
-                "alert_thresholds": config.alert_thresholds,
-            }
-        )
+        data_points = service.prediction_data_for_login(normalized, 60)
+        if not data_points:
+            return jsonify({"status": "no_data_in_db", "login": normalized})
+
+        prediction = predict_peak_viewers(data_points)
+        return jsonify({"login": normalized, "data_points_used": len(data_points), **prediction})
+
+    @app.get("/api/search")
+    def search() -> Any:
+        query = request.args.get("q", "").strip()
+        return json_service_response(lambda: service.search_streamers(query))
+
+    @app.post("/api/watchlist")
+    def add_watchlist() -> Any:
+        payload = request.get_json(silent=True) or {}
+        login = payload.get("login")
+        return json_service_response(lambda: service.add_streamer(login), status_code=201)
+
+    @app.delete("/api/watchlist/<login>")
+    def remove_watchlist(login: str) -> Any:
+        return json_service_response(lambda: service.remove_streamer(login))
 
     @app.get("/api/analytics/overview")
     def analytics_overview() -> Any:
-        try:
-            dashboard = service.get_dashboard()
-            return jsonify(
-                {
-                    "generated_at": dashboard["generated_at"],
-                    "overview": dashboard["overview"],
-                    "group_summary": dashboard["group_summary"],
-                    "category_mix": dashboard["category_mix"],
-                }
-            )
-        except requests.RequestException as exc:
-            app.logger.exception("Twitch request failed")
-            return jsonify({"error": "twitch_request_failed", "detail": str(exc)}), 502
-        except RuntimeError as exc:
-            return jsonify({"error": "configuration_error", "detail": str(exc)}), 503
+        def payload() -> dict[str, Any]:
+            dashboard_data = service.get_dashboard()
+            return {
+                "generated_at": dashboard_data["generated_at"],
+                "overview": dashboard_data["overview"],
+                "group_summary": dashboard_data["group_summary"],
+                "category_mix": dashboard_data["category_mix"],
+            }
+
+        return json_service_response(payload)
 
     @app.get("/api/analytics/leaderboards")
     def analytics_leaderboards() -> Any:
-        try:
-            dashboard = service.get_dashboard()
-            return jsonify(
-                {
-                    "generated_at": dashboard["generated_at"],
-                    "leaderboards": dashboard["leaderboards"],
-                }
-            )
-        except requests.RequestException as exc:
-            app.logger.exception("Twitch request failed")
-            return jsonify({"error": "twitch_request_failed", "detail": str(exc)}), 502
-        except RuntimeError as exc:
-            return jsonify({"error": "configuration_error", "detail": str(exc)}), 503
+        def payload() -> dict[str, Any]:
+            dashboard_data = service.get_dashboard()
+            return {
+                "generated_at": dashboard_data["generated_at"],
+                "leaderboards": dashboard_data["leaderboards"],
+            }
+
+        return json_service_response(payload)
 
     @app.get("/api/analytics/compare")
     def analytics_compare() -> Any:
         requested = request.args.get("logins")
         logins = parse_streamers(requested) if requested else config.streamers[:4]
-        try:
-            return jsonify(service.compare_streamers(logins))
-        except requests.RequestException as exc:
-            app.logger.exception("Twitch request failed")
-            return jsonify({"error": "twitch_request_failed", "detail": str(exc)}), 502
-        except RuntimeError as exc:
-            return jsonify({"error": "configuration_error", "detail": str(exc)}), 503
-
-    @app.get("/api/config")
-    def get_config() -> Any:
-        try:
-            return jsonify(service.get_config())
-        except Exception as exc:
-            app.logger.error(f"Failed to fetch config: {exc}")
-            return jsonify({"error": "config_failed", "detail": str(exc)}), 500
+        return json_service_response(lambda: service.compare_streamers(logins))
 
     @app.get("/api/analytics/stream/<login>")
     def analytics_stream(login: str) -> Any:
-        try:
-            return jsonify(service.get_analytics_stream(login.lower()))
-        except requests.RequestException as exc:
-            app.logger.exception("Twitch request failed")
-            return jsonify({"error": "twitch_request_failed", "detail": str(exc)}), 502
-        except RuntimeError as exc:
-            return jsonify({"error": "configuration_error", "detail": str(exc)}), 503
+        normalized = normalize_login(login)
+        if not normalized:
+            return jsonify({"error": "invalid_login", "detail": "Invalid Twitch login."}), 400
+        return json_service_response(lambda: service.get_analytics_stream(normalized))
 
-    @app.get("/api/search")
-    def search_streamer() -> Any:
-        query = request.args.get("q", "").strip()
-        if not query:
-            return jsonify([])
-        try:
-            return jsonify(service.search_streamer(query))
-        except Exception as exc:
-            app.logger.error(f"Search failed: {exc}")
-            return jsonify({"error": "search_failed", "detail": str(exc)}), 500
+    def _embed_parent() -> str:
+        host = (request.host or "").split(":", 1)[0].strip().lower()
+        return host or "localhost"
 
-    @app.post("/api/add_streamer")
-    def add_streamer() -> Any:
-        try:
-            data = request.get_json()
-            login = data.get("login", "").lower().strip()
-            if not login:
-                return jsonify({"error": "login_required"}), 400
-            
-            success = service.add_streamer(login)
-            if success:
-                return jsonify({"status": "success", "message": f"Added {login}"})
-            else:
-                return jsonify({"error": "already_tracked_or_not_found"}), 400
-        except Exception as exc:
-            app.logger.error(f"Add failed: {exc}")
-            return jsonify({"error": "add_failed", "detail": str(exc)}), 500
+    @app.get("/api/streams")
+    def streams_list() -> Any:
+        only_live = request.args.get("live") in {"1", "true", "yes"}
+        return json_service_response(
+            lambda: service.get_streams_payload(only_live=only_live, embed_parent=_embed_parent())
+        )
 
-    @app.post("/api/remove_streamer")
-    def remove_streamer() -> Any:
-        try:
-            data = request.get_json()
-            login = data.get("login", "").lower().strip()
-            if not login:
-                return jsonify({"error": "login_required"}), 400
-            
-            success = service.remove_streamer(login)
-            if success:
-                return jsonify({"status": "success", "message": f"Removed {login}"})
-            else:
-                return jsonify({"error": "not_tracked"}), 400
-        except Exception as exc:
-            app.logger.error(f"Remove failed: {exc}")
-            return jsonify({"error": "remove_failed", "detail": str(exc)}), 500
+    @app.get("/api/streams/embed/<login>")
+    def streams_embed(login: str) -> Any:
+        return json_service_response(
+            lambda: service.get_embed_descriptor(login, embed_parent=_embed_parent())
+        )
 
     return app
 
@@ -1232,8 +1820,6 @@ app = create_app()
 if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
     port = parse_int(os.getenv("PORT", "5050"), 5050)
-    print(f"Twitch Live Radar is running on {host}:{port}")
+    print(f"Audience Signal Lab is running on {host}:{port}")
     print("Use twitch_checker/config.json or .env to add real Twitch credentials.")
     app.run(host=host, port=port, debug=False)
-
-

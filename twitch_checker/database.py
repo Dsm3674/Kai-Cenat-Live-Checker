@@ -1,104 +1,102 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean
-from sqlalchemy.orm import declarative_base, sessionmaker
+from __future__ import annotations
+
+from contextlib import contextmanager
 from datetime import datetime
-import os
 from pathlib import Path
+from typing import Iterator
+
+from sqlalchemy import Column, DateTime, Float, Integer, String, create_engine
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = BASE_DIR / "data" / "twitch_analytics.db"
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-engine = create_engine(f'sqlite:///{DB_PATH}', echo=False)
+engine = create_engine(
+    f"sqlite:///{DB_PATH}",
+    echo=False,
+    connect_args={"check_same_thread": False},
+)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 Base = declarative_base()
 
+
 class StreamSnapshot(Base):
-    __tablename__ = 'stream_snapshots'
-    
+    __tablename__ = "stream_snapshots"
+
     id = Column(Integer, primary_key=True)
     username = Column(String, index=True)
     timestamp = Column(DateTime, default=datetime.utcnow, index=True)
     viewer_count = Column(Integer)
     game_name = Column(String)
     title = Column(String)
-    
+
+
 class ChatSentiment(Base):
-    __tablename__ = 'chat_sentiments'
-    
+    __tablename__ = "chat_sentiments"
+
     id = Column(Integer, primary_key=True)
     username = Column(String, index=True)
     timestamp = Column(DateTime, default=datetime.utcnow, index=True)
-    sentiment_score = Column(Float) # -1.0 to 1.0 from VADER
-    message_count = Column(Integer) # How many messages analyzed in this chunk
+    sentiment_score = Column(Float)
+    message_count = Column(Integer)
 
-class StreamerProfile(Base):
-    __tablename__ = 'streamer_profiles'
-    
-    id = Column(Integer, primary_key=True)
-    username = Column(String, index=True, unique=True)
-    display_name = Column(String)
-    profile_image_url = Column(String)
-    description = Column(String)
-    broadcaster_type = Column(String) # partner, affiliate, standard
-    created_at = Column(DateTime)
-    last_updated = Column(DateTime, default=datetime.utcnow)
-
-class DailyStats(Base):
-    __tablename__ = 'daily_stats'
-    
-    id = Column(Integer, primary_key=True)
-    username = Column(String, index=True)
-    date = Column(DateTime, index=True)
-    peak_viewers = Column(Integer)
-    avg_viewers = Column(Integer)
-    hours_streamed = Column(Float)
-    followers_gained = Column(Integer)
-    primary_game = Column(String)
-
-class StreamClip(Base):
-    __tablename__ = 'stream_clips'
-    
-    id = Column(String, primary_key=True) # Twitch clip ID
-    username = Column(String, index=True)
-    title = Column(String)
-    view_count = Column(Integer)
-    created_at = Column(DateTime)
-    thumbnail_url = Column(String)
-    embed_url = Column(String)
 
 Base.metadata.create_all(engine)
-SessionLocal = sessionmaker(bind=engine)
 
-def log_stream_snapshot(username: str, viewer_count: int, game_name: str, title: str):
-    session = SessionLocal()
-    snapshot = StreamSnapshot(
-        username=username,
-        viewer_count=viewer_count,
-        game_name=game_name,
-        title=title
-    )
-    session.add(snapshot)
-    session.commit()
-    session.close()
 
-def log_chat_sentiment(username: str, sentiment_score: float, message_count: int):
+@contextmanager
+def session_scope() -> Iterator[Session]:
     session = SessionLocal()
-    sentiment = ChatSentiment(
-        username=username,
-        sentiment_score=sentiment_score,
-        message_count=message_count
-    )
-    session.add(sentiment)
-    session.commit()
-    session.close()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
-def get_recent_snapshots(username: str, limit: int = 100):
-    session = SessionLocal()
-    results = session.query(StreamSnapshot).filter(StreamSnapshot.username == username).order_by(StreamSnapshot.timestamp.desc()).limit(limit).all()
-    session.close()
+
+def log_stream_snapshot(username: str, viewer_count: int, game_name: str, title: str) -> None:
+    with session_scope() as session:
+        session.add(
+            StreamSnapshot(
+                username=username,
+                viewer_count=viewer_count,
+                game_name=game_name,
+                title=title,
+            )
+        )
+
+
+def log_chat_sentiment(username: str, sentiment_score: float, message_count: int) -> None:
+    with session_scope() as session:
+        session.add(
+            ChatSentiment(
+                username=username,
+                sentiment_score=sentiment_score,
+                message_count=message_count,
+            )
+        )
+
+
+def get_recent_snapshots(username: str, limit: int = 100) -> list[dict[str, object]]:
+    with session_scope() as session:
+        results = (
+            session.query(StreamSnapshot)
+            .filter(StreamSnapshot.username == username)
+            .order_by(StreamSnapshot.timestamp.desc())
+            .limit(limit)
+            .all()
+        )
+
     return [
         {
-            "timestamp": r.timestamp.isoformat(),
-            "viewer_count": r.viewer_count,
-            "game_name": r.game_name
-        } for r in reversed(results)
+            "timestamp": row.timestamp.isoformat(),
+            "viewer_count": row.viewer_count,
+            "game_name": row.game_name,
+            "title": row.title,
+        }
+        for row in reversed(results)
     ]

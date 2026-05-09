@@ -1,1318 +1,1303 @@
-/* ═══════════════════════════════════════════════════════════
-   StreamPulse — Mission Control Frontend Engine
-   Real-time Twitch Intelligence Dashboard
-═══════════════════════════════════════════════════════════ */
+const state = {
+    anomalySummary: null,
+    chart: null,
+    command: null,
+    config: null,
+    dashboard: null,
+    health: null,
+    history: null,
+    integration: null,
+    ml: null,
+    selectedLogin: "",
+    intervalId: null,
+    searchTimer: null,
+    searchResults: [],
+    searchQuery: "",
+};
 
-'use strict';
+const elements = {
+    alertsFeed: document.getElementById("alertsFeed"),
+    anomalyCount: document.getElementById("anomalyCount"),
+    anomalySummary: document.getElementById("anomalySummary"),
+    appTitle: document.getElementById("appTitle"),
+    categoryMix: document.getElementById("categoryMix"),
+    chartState: document.getElementById("chartState"),
+    commandBrief: document.getElementById("commandBrief"),
+    commandChecksCount: document.getElementById("commandChecksCount"),
+    commandEventCounts: document.getElementById("commandEventCounts"),
+    commandIndexHost: document.getElementById("commandIndexHost"),
+    commandIndexMode: document.getElementById("commandIndexMode"),
+    commandIndexSummary: document.getElementById("commandIndexSummary"),
+    commandPosture: document.getElementById("commandPosture"),
+    commandPulseCount: document.getElementById("commandPulseCount"),
+    commandRisksCount: document.getElementById("commandRisksCount"),
+    commandScore: document.getElementById("commandScore"),
+    commandTopPosture: document.getElementById("commandTopPosture"),
+    commandZonesCount: document.getElementById("commandZonesCount"),
+    forecastSamples: document.getElementById("forecastSamples"),
+    groupSummary: document.getElementById("groupSummary"),
+    heroLastUpdated: document.getElementById("heroLastUpdated"),
+    heroLiveCount: document.getElementById("heroLiveCount"),
+    heroTrackedCount: document.getElementById("heroTrackedCount"),
+    heroUpdateMeta: document.getElementById("heroUpdateMeta"),
+    heroViewerTotal: document.getElementById("heroViewerTotal"),
+    kpiAnomaly: document.getElementById("kpiAnomaly"),
+    kpiAnomalyMeta: document.getElementById("kpiAnomalyMeta"),
+    kpiConfidenceBadge: document.getElementById("kpiConfidenceBadge"),
+    kpiConsistency: document.getElementById("kpiConsistency"),
+    kpiCurrent: document.getElementById("kpiCurrent"),
+    kpiError: document.getElementById("kpiError"),
+    kpiErrorMeta: document.getElementById("kpiErrorMeta"),
+    kpiPredict: document.getElementById("kpiPredict"),
+    kpiSession: document.getElementById("kpiSession"),
+    kpiTrendBadge: document.getElementById("kpiTrendBadge"),
+    leaderboardList: document.getElementById("leaderboardList"),
+    loadingScreen: document.getElementById("loadingScreen"),
+    mainChart: document.getElementById("mainChart"),
+    missionCategory: document.getElementById("missionCategory"),
+    missionCategoryMeta: document.getElementById("missionCategoryMeta"),
+    missionHeat: document.getElementById("missionHeat"),
+    missionHeatMeta: document.getElementById("missionHeatMeta"),
+    missionMode: document.getElementById("missionMode"),
+    missionModeMeta: document.getElementById("missionModeMeta"),
+    missionRefresh: document.getElementById("missionRefresh"),
+    missionRefreshMeta: document.getElementById("missionRefreshMeta"),
+    playerFrame: document.getElementById("streamPlayer"),
+    playerMeta: document.getElementById("playerMeta"),
+    playerState: document.getElementById("playerState"),
+    refreshButton: document.getElementById("refreshButton"),
+    removeStreamerButton: document.getElementById("removeStreamerButton"),
+    searchInput: document.getElementById("streamerSearch"),
+    searchResults: document.getElementById("searchResults"),
+    selectedCategory: document.getElementById("selectedCategory"),
+    selectedDescription: document.getElementById("selectedDescription"),
+    selectedGroups: document.getElementById("selectedGroups"),
+    selectedInsight: document.getElementById("selectedInsight"),
+    selectedLogin: document.getElementById("selectedLogin"),
+    selectedName: document.getElementById("selectedName"),
+    selectedPeak: document.getElementById("selectedPeak"),
+    selectedSessions: document.getElementById("selectedSessions"),
+    selectedStatusPill: document.getElementById("selectedStatusPill"),
+    selectedTitle: document.getElementById("selectedTitle"),
+    selectedUptime: document.getElementById("selectedUptime"),
+    sessionList: document.getElementById("sessionList"),
+    stripBusState: document.getElementById("stripBusState"),
+    stripEmbedState: document.getElementById("stripEmbedState"),
+    stripForecastState: document.getElementById("stripForecastState"),
+    stripOpsState: document.getElementById("stripOpsState"),
+    streamerSelect: document.getElementById("streamerSelect"),
+    systemBanner: document.getElementById("systemBanner"),
+    systemChecks: document.getElementById("systemChecks"),
+    trackedGrid: document.getElementById("trackedGrid"),
+    riskRegister: document.getElementById("riskRegister"),
+    watchLink: document.getElementById("watchLink"),
+    watchlistPulse: document.getElementById("watchlistPulse"),
+    zoneDigest: document.getElementById("zoneDigest"),
+};
 
-// ── Constants ──────────────────────────────────────────────
-const POLL_INTERVAL_MS  = 30_000;
-const COUNTER_FRAMES    = 30;
+const chartAvailable = typeof window.Chart !== "undefined";
 
-// ── State ──────────────────────────────────────────────────
-let streamerList        = [];     // Loaded from /api/config
-let currentLogin        = '';
-let currentView         = 'dashboard';
-let mainChartInstance   = null;
-let compareChartInstance = null;
-let categoryChartInstance = null;
-let lastDashboardData   = null;   // full /api/dashboard response
-let animFrameIds        = {};     // keyed animated counter RAF IDs
-let lastCounterValues   = {};     // last rendered values for smooth delta
-let searchTimeout       = null;
+if (chartAvailable) {
+    Chart.defaults.color = "#c5bdab";
+    Chart.defaults.font.family = "IBM Plex Mono";
+    Chart.defaults.borderColor = "rgba(244, 241, 232, 0.16)";
+}
 
-// ═══════════════════════════════════════════════════════════
-// ANIMATED BACKGROUND CANVAS
-// ═══════════════════════════════════════════════════════════
-(function initBackground() {
-    const canvas = document.getElementById('bgCanvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    let W, H, particles = [];
-
-    function resize() {
-        W = canvas.width  = window.innerWidth;
-        H = canvas.height = window.innerHeight;
+function createElement(tag, options = {}) {
+    const element = document.createElement(tag);
+    if (options.className) {
+        element.className = options.className;
     }
-    resize();
-    window.addEventListener('resize', resize);
-
-    function randBetween(a, b) { return Math.random() * (b - a) + a; }
-
-    // Create grid dots
-    function initParticles() {
-        particles = [];
-        const COLS = Math.ceil(W / 80);
-        const ROWS = Math.ceil(H / 80);
-        for (let r = 0; r < ROWS; r++) {
-            for (let c = 0; c < COLS; c++) {
-                particles.push({
-                    x: c * 80 + randBetween(-6, 6),
-                    y: r * 80 + randBetween(-6, 6),
-                    baseX: c * 80,
-                    baseY: r * 80,
-                    opacity: randBetween(0.03, 0.18),
-                    phase: randBetween(0, Math.PI * 2),
-                    speed: randBetween(0.3, 0.9),
-                    size: randBetween(1, 2.2),
-                });
+    if (options.text != null) {
+        element.textContent = options.text;
+    }
+    if (options.attrs) {
+        for (const [key, value] of Object.entries(options.attrs)) {
+            if (value != null) {
+                element.setAttribute(key, value);
             }
         }
     }
-    initParticles();
-    window.addEventListener('resize', initParticles);
+    return element;
+}
 
-    // Color accents cycling
-    const COLORS = [
-        'rgba(168, 85, 247,',
-        'rgba(34, 211, 238,',
-        'rgba(74, 222, 128,',
+function clearElement(element) {
+    if (!element) {
+        return;
+    }
+    while (element.firstChild) {
+        element.removeChild(element.firstChild);
+    }
+}
+
+function appendEmptyState(container, message) {
+    clearElement(container);
+    container.appendChild(createElement("p", { className: "empty-copy", text: message }));
+}
+
+function formatDateTime(value) {
+    if (!value) {
+        return "Waiting";
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return "Waiting";
+    }
+    return new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+    }).format(date);
+}
+
+function formatCompact(value) {
+    return new Intl.NumberFormat(undefined, {
+        notation: "compact",
+        maximumFractionDigits: 1,
+    }).format(Number(value) || 0);
+}
+
+function formatNumber(value) {
+    return new Intl.NumberFormat().format(Number(value) || 0);
+}
+
+function formatMinutes(value) {
+    const minutes = Number(value) || 0;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours >= 24) {
+        const days = Math.floor(hours / 24);
+        return `${days}d ${hours % 24}h`;
+    }
+    if (hours) {
+        return `${hours}h ${mins}m`;
+    }
+    return `${mins}m`;
+}
+
+function formatCacheAge(value) {
+    const seconds = Number(value);
+    if (!Number.isFinite(seconds) || seconds < 0) {
+        return "fresh";
+    }
+    if (seconds < 60) {
+        return `${seconds}s old`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes}m old`;
+}
+
+function titleCase(value) {
+    if (!value) {
+        return "Unknown";
+    }
+    return String(value)
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function showBanner(message, kind = "warning") {
+    elements.systemBanner.textContent = message;
+    elements.systemBanner.className = `system-banner ${kind}`;
+}
+
+function hideBanner() {
+    elements.systemBanner.className = "system-banner hidden";
+    elements.systemBanner.textContent = "";
+}
+
+function hideLoadingScreen() {
+    if (!elements.loadingScreen) {
+        return;
+    }
+    elements.loadingScreen.classList.add("is-hidden");
+}
+
+function getSelectedStreamer() {
+    return state.dashboard?.streamers?.find((streamer) => streamer.login === state.selectedLogin) || null;
+}
+
+function getTwitchParentHost() {
+    const host = window.location.hostname || "localhost";
+    return host === "0.0.0.0" ? "localhost" : host;
+}
+
+function getTwitchEmbedUrl(login) {
+    const parent = encodeURIComponent(getTwitchParentHost());
+    return `https://player.twitch.tv/?channel=${encodeURIComponent(login)}&parent=${parent}&muted=true&autoplay=false`;
+}
+
+function buildPlaceholderStreamers(config) {
+    const groups = config.streamer_groups || {};
+    return (config.streamers || []).map((login) => ({
+        login,
+        display_name: login,
+        title: "Live telemetry activates after credentials are connected.",
+        description: "This placeholder keeps the interface presentation-ready even before real Twitch credentials are added.",
+        is_live: false,
+        game_name: "Awaiting data",
+        viewer_count: 0,
+        uptime: "Offline",
+        url: `https://www.twitch.tv/${login}`,
+        groups: Object.entries(groups)
+            .filter(([, members]) => members.includes(login))
+            .map(([name]) => name),
+        analytics: {
+            session_count: 0,
+            avg_duration_minutes: 0,
+            best_peak_viewers: 0,
+            consistency_score: 0,
+            trend_score: 0,
+            top_category: "Awaiting data",
+        },
+        recent_sessions: [],
+        recent_snapshots: [],
+    }));
+}
+
+function buildFallbackDashboard() {
+    const config = state.config || {};
+    const streamers = buildPlaceholderStreamers(config);
+    return {
+        title: config.title || "Audience Signal Lab",
+        generated_at: new Date().toISOString(),
+        check_interval: config.check_interval || 60,
+        summary: {
+            tracked: streamers.length,
+            live: 0,
+            offline: streamers.length,
+            current_viewers: 0,
+        },
+        overview: {
+            dominant_category: "Awaiting data",
+        },
+        group_summary: Object.entries(config.streamer_groups || {}).map(([name, members]) => ({
+            name,
+            tracked: members.length,
+            live: 0,
+            current_viewers: 0,
+        })),
+        leaderboards: {
+            live_now: [],
+            best_peak: [],
+            most_active: [],
+            trend: [],
+        },
+        category_mix: [],
+        alerts: [],
+        streamers,
+    };
+}
+
+function buildFallbackCommandCenter() {
+    const dashboard = state.dashboard || buildFallbackDashboard();
+    const configured = Boolean(state.health?.configured);
+
+    return {
+        posture: configured ? "Nominal" : "Credential Mode",
+        posture_score: configured ? 32 : 16,
+        operation_brief: configured
+            ? "Telemetry is online, but the command layer is still waiting for stronger session history before it can issue sharper operational guidance."
+            : "Credential mode is active. Add Twitch credentials to unlock live telemetry, risk scoring, and search-driven watchlist expansion.",
+        system_checks: [
+            {
+                name: "Twitch credentials",
+                status: configured ? "healthy" : "blocked",
+                detail: configured ? "Connected to the Twitch API." : "Missing client ID and secret.",
+            },
+            {
+                name: "Watchlist",
+                status: dashboard.summary.tracked ? "healthy" : "watch",
+                detail: `${dashboard.summary.tracked} tracked creators loaded.`,
+            },
+            {
+                name: "Model layer",
+                status: "watch",
+                detail: "Forecast quality improves as more local history accumulates.",
+            },
+        ],
+        risk_register: [],
+        zone_status: [
+            {
+                name: "Overview",
+                status: configured ? "healthy" : "watch",
+                detail: `${dashboard.summary.tracked} creators and ${dashboard.summary.live} live sessions in view.`,
+            },
+            {
+                name: "Operations",
+                status: "watch",
+                detail: "Forecast, player, and profile stack are online.",
+            },
+            {
+                name: "Analysis",
+                status: "watch",
+                detail: "Leaderboards and category mix are waiting for deeper historical shape.",
+            },
+            {
+                name: "Archive",
+                status: "watch",
+                detail: "Recent sessions and event wire expand as the tracker keeps running.",
+            },
+        ],
+        watchlist_pulse: (dashboard.streamers || []).slice(0, 4).map((streamer) => ({
+            login: streamer.login,
+            display_name: streamer.display_name,
+            status: streamer.is_live ? "live" : "standby",
+            value: streamer.viewer_count || streamer.analytics?.best_peak_viewers || 0,
+            detail: streamer.is_live
+                ? `${formatCompact(streamer.viewer_count)} viewers right now`
+                : `${streamer.analytics?.session_count || 0} tracked sessions`,
+        })),
+        event_counts: { high: 0, medium: 0, low: 0 },
+    };
+}
+
+function buildFallbackAnomalySummary() {
+    return {
+        generated_at: new Date().toISOString(),
+        tracked: state.dashboard?.summary?.tracked || 0,
+        active_anomalies: [],
+        recent_events: [],
+        counts: { high: 0, medium: 0, watch: 0 },
+    };
+}
+
+function getTrendClass(trend) {
+    if (trend === "growing" || trend === "high") {
+        return "growing";
+    }
+    if (trend === "declining" || trend === "low") {
+        return "declining";
+    }
+    if (trend === "stable" || trend === "medium") {
+        return "stable";
+    }
+    return "neutral";
+}
+
+function getStatusClass(status) {
+    if (status === "healthy" || status === "nominal" || status === "live") {
+        return "growing";
+    }
+    if (status === "blocked" || status === "critical" || status === "high") {
+        return "declining";
+    }
+    if (status === "watch" || status === "elevated" || status === "medium") {
+        return "stable";
+    }
+    return "neutral";
+}
+
+function setTrendBadge(trend) {
+    const safeTrend = trend || "neutral";
+    elements.kpiTrendBadge.textContent = titleCase(safeTrend);
+    elements.kpiTrendBadge.className = `pill ${getTrendClass(safeTrend)}`;
+}
+
+function renderHero() {
+    const dashboard = state.dashboard || buildFallbackDashboard();
+    elements.appTitle.textContent = dashboard.title;
+    elements.heroTrackedCount.textContent = formatNumber(dashboard.summary.tracked);
+    elements.heroLiveCount.textContent = formatNumber(dashboard.summary.live);
+    elements.heroViewerTotal.textContent = formatCompact(dashboard.summary.current_viewers);
+    elements.heroLastUpdated.textContent = formatDateTime(dashboard.generated_at);
+    elements.heroUpdateMeta.textContent = `refresh every ${dashboard.check_interval || 60}s`;
+    elements.searchInput.disabled = !state.health?.configured;
+    elements.searchInput.placeholder = state.health?.configured
+        ? "Search Twitch by login or channel name"
+        : "Add credentials to unlock Twitch search";
+}
+
+function renderMissionStrip() {
+    const dashboard = state.dashboard || buildFallbackDashboard();
+    const overview = dashboard.overview || {};
+    const hottest = overview.hottest_stream;
+    const consistent = overview.most_consistent;
+
+    elements.missionMode.textContent = state.health?.configured ? "Live telemetry" : "Credential mode";
+    elements.missionModeMeta.textContent = state.health?.configured
+        ? "Twitch API connected and watchlist telemetry is active."
+        : "Using placeholder data until Twitch credentials are added.";
+
+    elements.missionCategory.textContent = overview.dominant_category || "Awaiting data";
+    elements.missionCategoryMeta.textContent = `${formatNumber(dashboard.summary.live)} live / ${formatNumber(dashboard.summary.tracked)} tracked`;
+
+    elements.missionHeat.textContent = hottest?.display_name || "No live leader";
+    elements.missionHeatMeta.textContent = hottest
+        ? `${formatCompact(hottest.viewer_count)} viewers right now`
+        : consistent
+        ? `${consistent.display_name} leads consistency at ${consistent.score}/100`
+        : "Signal leadership will appear once the watchlist has more activity.";
+
+    elements.missionRefresh.textContent = `${dashboard.check_interval || 60}s cycle`;
+    elements.missionRefreshMeta.textContent = state.health?.cache_age_seconds != null
+        ? `Dashboard cache ${formatCacheAge(state.health.cache_age_seconds)}`
+        : "Polling begins after the first dashboard refresh.";
+}
+
+function renderBriefingList(container, items, emptyMessage) {
+    clearElement(container);
+    if (!items.length) {
+        appendEmptyState(container, emptyMessage);
+        return;
+    }
+
+    for (const item of items) {
+        const row = createElement("article", { className: "briefing-row" });
+
+        const meta = createElement("div", { className: "briefing-row-copy" });
+        meta.appendChild(createElement("strong", { text: item.name || item.display_name || "Unknown" }));
+        meta.appendChild(createElement("p", { text: item.detail || item.message || "No detail available." }));
+        row.appendChild(meta);
+
+        const badgeText = item.status ? titleCase(item.status) : item.value != null ? formatCompact(item.value) : "Open";
+        row.appendChild(
+            createElement("span", {
+                className: `pill ${getStatusClass(item.status)}`,
+                text: badgeText,
+            })
+        );
+        container.appendChild(row);
+    }
+}
+
+function renderWatchlistPulse() {
+    clearElement(elements.watchlistPulse);
+    const items = state.command?.watchlist_pulse || [];
+    if (!items.length) {
+        appendEmptyState(elements.watchlistPulse, "Watchlist pulse will populate once tracked creators begin producing signal.");
+        return;
+    }
+
+    for (const item of items) {
+        const card = createElement("article", { className: "pulse-card" });
+        const top = createElement("div", { className: "pulse-head" });
+        top.appendChild(createElement("strong", { text: item.display_name || item.login }));
+        top.appendChild(
+            createElement("span", {
+                className: `pill ${getStatusClass(item.status)}`,
+                text: titleCase(item.status || "watch"),
+            })
+        );
+        card.appendChild(top);
+        card.appendChild(createElement("div", { className: "pulse-value", text: formatCompact(item.value || 0) }));
+        card.appendChild(createElement("p", { text: item.detail || "No watchlist detail available." }));
+        elements.watchlistPulse.appendChild(card);
+    }
+}
+
+function renderEventCounts() {
+    clearElement(elements.commandEventCounts);
+    const counts = state.command?.event_counts || { high: 0, medium: 0, low: 0 };
+    const rows = [
+        ["High events", counts.high || 0, "declining"],
+        ["Medium events", counts.medium || 0, "stable"],
+        ["Low events", counts.low || 0, "neutral"],
     ];
-    let tick = 0;
 
-    function drawFrame() {
-        ctx.clearRect(0, 0, W, H);
-        tick += 0.01;
-
-        // Draw subtle grid lines
-        ctx.strokeStyle = 'rgba(255,255,255,0.025)';
-        ctx.lineWidth = 0.5;
-        for (let x = 0; x < W; x += 80) {
-            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-        }
-        for (let y = 0; y < H; y += 80) {
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-        }
-
-        // Draw animated particles
-        particles.forEach((p, i) => {
-            const breath = Math.sin(tick * p.speed + p.phase);
-            const alpha = p.opacity + breath * 0.06;
-            const colorStr = COLORS[i % COLORS.length];
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            ctx.fillStyle = `${colorStr}${Math.max(0, alpha).toFixed(3)})`;
-            ctx.fill();
-        });
-
-        requestAnimationFrame(drawFrame);
+    for (const [label, value, tone] of rows) {
+        const chip = createElement("span", { className: `signal-chip ${tone}` });
+        chip.appendChild(createElement("strong", { text: String(value) }));
+        chip.appendChild(createElement("small", { text: label }));
+        elements.commandEventCounts.appendChild(chip);
     }
-    drawFrame();
-})();
-
-// ═══════════════════════════════════════════════════════════
-// CLOCK
-// ═══════════════════════════════════════════════════════════
-function updateClock() {
-    const el = document.getElementById('topbarTime');
-    if (!el) return;
-    const now = new Date();
-    el.textContent = now.toLocaleTimeString('en-US', { hour12: false });
 }
-setInterval(updateClock, 1000);
-updateClock();
 
-// ═══════════════════════════════════════════════════════════
-// ANIMATED COUNTER
-// ═══════════════════════════════════════════════════════════
-function animateCounter(elementId, targetValue, formatter) {
-    const el = document.getElementById(elementId);
-    if (!el) return;
+function renderAnomalySummary() {
+    const anomalySummary = state.anomalySummary || buildFallbackAnomalySummary();
+    elements.anomalyCount.textContent = String(anomalySummary.active_anomalies?.length || 0);
+    const items = (anomalySummary.active_anomalies || []).map((item) => ({
+        name: item.display_name || item.login,
+        status: item.severity,
+        detail: item.reason,
+    }));
+    renderBriefingList(elements.anomalySummary, items, "No active anomalies are being flagged across the watchlist.");
+}
 
-    if (animFrameIds[elementId]) cancelAnimationFrame(animFrameIds[elementId]);
-    const start = lastCounterValues[elementId] || 0;
-    const delta = targetValue - start;
-    let frame = 0;
+function renderCommandCenter() {
+    const command = state.command || buildFallbackCommandCenter();
+    const checks = command.system_checks || [];
+    const risks = command.risk_register || [];
+    const zones = command.zone_status || [];
+    const pulse = command.watchlist_pulse || [];
 
-    function step() {
-        frame++;
-        const progress = Math.min(frame / COUNTER_FRAMES, 1);
-        // Ease-out cubic
-        const eased = 1 - Math.pow(1 - progress, 3);
-        const current = Math.round(start + delta * eased);
-        el.textContent = formatter ? formatter(current) : current.toLocaleString();
-        if (frame < COUNTER_FRAMES) {
-            animFrameIds[elementId] = requestAnimationFrame(step);
+    elements.commandTopPosture.textContent = command.posture || "Watch";
+    elements.commandPosture.textContent = command.posture || "Calibrating";
+    elements.commandScore.textContent = `${Math.round(command.posture_score || 0)}/100`;
+    elements.commandBrief.textContent = command.operation_brief || "The command layer is collecting enough signal to issue a stronger summary.";
+    elements.commandChecksCount.textContent = `${checks.filter((item) => item.status === "healthy").length}/${checks.length || 0}`;
+    elements.commandRisksCount.textContent = String(risks.length);
+    elements.commandZonesCount.textContent = String(zones.length);
+    elements.commandPulseCount.textContent = String(pulse.length);
+
+    const summaryBits = [];
+    if (state.dashboard?.summary) {
+        summaryBits.push(`${formatNumber(state.dashboard.summary.tracked)} tracked`);
+        summaryBits.push(`${formatNumber(state.dashboard.summary.live)} live`);
+        summaryBits.push(`${formatCompact(state.dashboard.summary.current_viewers)} viewers`);
+    }
+    elements.commandIndexSummary.textContent = summaryBits.length
+        ? `Index / ${summaryBits.join(" / ")} / command briefing active`
+        : "Index / command briefing active";
+    elements.commandIndexMode.textContent = command.posture
+        ? `Mode / ${command.posture.toLowerCase()} / organization tuned for fast scanning`
+        : "Mode / command overview";
+    elements.commandIndexHost.textContent = `Local command host: ${window.location.host}`;
+    elements.stripOpsState.textContent = `Ops: ${command.posture || "Watch"}`;
+    elements.stripBusState.textContent = state.health?.configured
+        ? `Data bus: ${state.health?.cache_age_seconds != null ? formatCacheAge(state.health.cache_age_seconds) : "fresh"}`
+        : "Data bus: credential mode";
+    elements.stripForecastState.textContent = state.ml?.status === "success" || state.command?.system_checks?.some((item) => item.name === "Forecast layer" && item.status === "healthy")
+        ? "Forecast: active"
+        : "Forecast: limited";
+    elements.stripEmbedState.textContent = `Embeds: ${state.selectedLogin ? titleCase(state.selectedLogin) : "ready"}`;
+
+    renderBriefingList(elements.systemChecks, checks, "System checks are still calibrating.");
+    renderBriefingList(elements.riskRegister, risks, "No immediate risks are active across the watchlist.");
+    renderAnomalySummary();
+    renderBriefingList(elements.zoneDigest, zones, "Zone summaries will appear after the dashboard initializes.");
+    renderEventCounts();
+    renderWatchlistPulse();
+}
+
+function renderSelect() {
+    const options = state.dashboard?.streamers?.length ? state.dashboard.streamers : buildPlaceholderStreamers(state.config || {});
+    clearElement(elements.streamerSelect);
+
+    for (const streamer of options) {
+        const option = createElement("option", { text: streamer.display_name || streamer.login });
+        option.value = streamer.login;
+        elements.streamerSelect.appendChild(option);
+    }
+
+    if (!state.selectedLogin && options[0]) {
+        state.selectedLogin = options[0].login;
+    }
+    elements.streamerSelect.value = state.selectedLogin;
+}
+
+function renderKPIs() {
+    const streamer = getSelectedStreamer();
+    const ml = state.ml;
+
+    elements.kpiPredict.textContent = ml?.status === "success" ? formatCompact(ml.predicted_peak) : "--";
+    elements.kpiCurrent.textContent = streamer ? formatCompact(streamer.viewer_count) : "--";
+    elements.kpiConsistency.textContent = streamer ? `${streamer.analytics.consistency_score}/100` : "--";
+    elements.kpiSession.textContent = streamer ? formatMinutes(streamer.analytics.avg_duration_minutes) : "--";
+
+    if (ml?.status === "success") {
+        setTrendBadge(ml.trend);
+        elements.kpiError.textContent = `+/-${formatCompact(Math.round(ml.model_std_error || 0))}`;
+        elements.kpiErrorMeta.textContent = `MAE ${formatCompact(Math.round(ml.model_mae || 0))} vs naive ${formatCompact(Math.round(ml.baseline_mae || 0))}`;
+        elements.kpiConfidenceBadge.textContent = `${titleCase(ml.confidence_label)} confidence`;
+        elements.kpiConfidenceBadge.className = `pill ${getTrendClass(ml.confidence_label)}`;
+
+        if (ml.anomalies_detected && ml.anomalies?.length) {
+            const latest = ml.anomalies[ml.anomalies.length - 1];
+            elements.kpiAnomaly.textContent = "Elevated";
+            elements.kpiAnomalyMeta.textContent = `Latest z-score ${latest.z_score.toFixed(2)} suggests unusual audience acceleration.`;
         } else {
-            lastCounterValues[elementId] = targetValue;
+            elements.kpiAnomaly.textContent = "Normal";
+            elements.kpiAnomalyMeta.textContent = "No abnormal growth spikes are currently flagged.";
         }
+    } else {
+        setTrendBadge("neutral");
+        elements.kpiError.textContent = "--";
+        elements.kpiErrorMeta.textContent = "More historical samples are needed before model diagnostics become reliable.";
+        elements.kpiConfidenceBadge.textContent = "Model quality";
+        elements.kpiConfidenceBadge.className = "pill neutral";
+        elements.kpiAnomaly.textContent = "Calibrating";
+        elements.kpiAnomalyMeta.textContent = "More historical samples are needed before the anomaly engine becomes reliable.";
     }
-    step();
 }
 
-function fmtViewers(n) {
-    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-    if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K';
-    return n.toLocaleString();
-}
-
-// ═══════════════════════════════════════════════════════════
-// STREAMER PILLS — INIT
-// ═══════════════════════════════════════════════════════════
-function initStreamerPills() {
-    const container = document.getElementById('streamerPills');
-    if (!container) return;
-    container.innerHTML = '';
-
-    streamerList.forEach(login => {
-        const btn = document.createElement('button');
-        btn.className = 'streamer-pill';
-        btn.id        = `pill-${login}`;
-        btn.textContent = login;
-        btn.onclick   = () => selectStreamer(login);
-        container.appendChild(btn);
-    });
-
-    // Update current login if empty
-    if (!currentLogin && streamerList.length > 0) {
-        currentLogin = streamerList[0];
-    }
-
-    // Populate compare dropdowns
-    ['compareSelectA', 'compareSelectB'].forEach((id, idx) => {
-        const sel = document.getElementById(id);
-        if (!sel) return;
-        sel.innerHTML = '';
-        streamerList.forEach(login => {
-            const opt = document.createElement('option');
-            opt.value = login;
-            opt.textContent = login;
-            if ((idx === 0 && login === streamerList[0]) || (idx === 1 && login === streamerList[1])) {
-                opt.selected = true;
-            }
-            sel.appendChild(opt);
-        });
-    });
-
-    if (currentLogin) selectStreamer(currentLogin);
-}
-
-// ═══════════════════════════════════════════════════════════
-// SEARCH & ADD STREAMER
-// ═══════════════════════════════════════════════════════════
-async function handleSearch(e) {
-    const query = e.target.value.trim();
-    const resultsContainer = document.getElementById('searchResults');
-    
-    if (query.length < 2) {
-        resultsContainer.style.display = 'none';
+function renderProfile() {
+    const streamer = getSelectedStreamer();
+    if (!streamer) {
         return;
     }
 
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(async () => {
-        try {
-            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-            const data = await res.json();
-            
-            if (data.length === 0) {
-                resultsContainer.innerHTML = '<div class="search-result-item">No results found</div>';
-            } else {
-                resultsContainer.innerHTML = data.map(s => `
-                    <div class="search-result-item">
-                        <img src="${s.profile_image_url}" class="search-result-avatar">
-                        <div class="search-result-info">
-                            <div class="search-result-name">${s.display_name}</div>
-                            <div class="search-result-meta">${s.game_name || 'Searching...'}</div>
-                        </div>
-                        <button class="search-add-btn ${s.is_tracked ? 'tracked' : ''}" 
-                                onclick="addStreamer('${s.login}')" 
-                                ${s.is_tracked ? 'disabled' : ''}>
-                            ${s.is_tracked ? 'Tracked' : 'Add'}
-                        </button>
-                    </div>
-                `).join('');
-            }
-            resultsContainer.style.display = 'block';
-        } catch (err) {
-            console.error('Search failed:', err);
+    elements.selectedName.textContent = streamer.display_name;
+    elements.selectedLogin.textContent = `@${streamer.login}`;
+    elements.selectedTitle.textContent = streamer.title || "No live title available.";
+    elements.selectedDescription.textContent = streamer.description || "No channel description available yet.";
+    elements.selectedCategory.textContent = streamer.game_name || streamer.analytics.top_category || "Unknown";
+    elements.selectedUptime.textContent = streamer.is_live ? streamer.uptime : "Offline";
+    elements.selectedPeak.textContent = formatCompact(streamer.analytics.best_peak_viewers);
+    elements.selectedSessions.textContent = formatNumber(streamer.analytics.session_count);
+    elements.watchLink.href = streamer.url;
+    elements.selectedStatusPill.textContent = streamer.is_live ? "Live signal" : "Offline";
+    elements.selectedStatusPill.className = `pill ${streamer.is_live ? "growing" : "neutral"}`;
+    elements.removeStreamerButton.disabled = !(state.dashboard?.streamers?.length);
+
+    clearElement(elements.selectedGroups);
+    const groups = streamer.groups?.length ? streamer.groups : ["Ungrouped"];
+    for (const group of groups) {
+        elements.selectedGroups.appendChild(createElement("span", { className: "group-chip", text: group }));
+    }
+
+    const insightBits = [];
+    const selectedAlerts = (state.dashboard?.alerts || []).filter((alert) => alert.login === streamer.login);
+    const latestAlert = selectedAlerts[0] || null;
+    const peakGap = Math.max((streamer.analytics.best_peak_viewers || 0) - (streamer.viewer_count || 0), 0);
+    if (streamer.is_live) {
+        insightBits.push(`${streamer.display_name} is currently live in ${streamer.game_name || "an active category"}.`);
+        if (streamer.analytics.best_peak_viewers && peakGap > 0) {
+            insightBits.push(`They are ${formatCompact(peakGap)} viewers below their recorded peak.`);
         }
-    }, 300);
-}
-
-async function addStreamer(login) {
-    try {
-        const res = await fetch('/api/add_streamer', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ login })
-        });
-        const data = await res.json();
-        if (data.status === 'success') {
-            document.getElementById('streamerSearch').value = '';
-            document.getElementById('searchResults').style.display = 'none';
-            await loadConfig(); // Reload everything
-            selectStreamer(login);
-        } else {
-            alert(data.error || 'Failed to add streamer');
-        }
-    } catch (err) {
-        console.error('Add failed:', err);
-    }
-}
-
-// Event Listeners for search
-document.getElementById('streamerSearch')?.addEventListener('input', handleSearch);
-document.addEventListener('click', (e) => {
-    if (!e.target.closest('.search-container')) {
-        document.getElementById('searchResults').style.display = 'none';
-    }
-});
-
-// ═══════════════════════════════════════════════════════════
-// VIEW SWITCHING
-// ═══════════════════════════════════════════════════════════
-function switchView(view) {
-    currentView = view;
-    ['dashboard', 'compare', 'leaderboard'].forEach(v => {
-        const section = document.getElementById(`view-${v}`);
-        const navBtn  = document.getElementById(`nav-${v}`);
-        if (section) section.style.display = v === view ? 'flex' : 'none';
-        if (navBtn)  navBtn.classList.toggle('active', v === view);
-    });
-
-    if (view === 'compare')     runCompare();
-    if (view === 'leaderboard') renderLeaderboard();
-}
-
-// ═══════════════════════════════════════════════════════════
-// SELECT STREAMER
-// ═══════════════════════════════════════════════════════════
-function selectStreamer(login) {
-    currentLogin = login;
-    document.querySelectorAll('.streamer-pill').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    const pill = document.getElementById(`pill-${login}`);
-    if (pill) pill.classList.add('active');
-
-    // Immediately render from cache so the UI snaps to the new streamer
-    // without waiting for a full network round-trip
-    if (lastDashboardData) {
-        updateDashboardView(lastDashboardData);
-        updateSidebar(lastDashboardData);
-    }
-
-    // Then fire new fetch + ML in background
-    fetchDashboard();
-}
-
-// ═══════════════════════════════════════════════════════════
-// MAIN DATA FETCH
-// ═══════════════════════════════════════════════════════════
-async function loadConfig() {
-    try {
-        const res = await fetch('/api/config');
-        const data = await res.json();
-        streamerList = data.streamers || [];
-        initStreamerPills();
-    } catch (err) {
-        console.error('Failed to load config:', err);
-    }
-}
-
-async function fetchDashboard() {
-    if (streamerList.length === 0) {
-        await loadConfig();
-    }
-    try {
-        const res = await fetch('/api/dashboard');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        lastDashboardData = data;
-
-        updateTopbarStats(data);
-        updateSidebar(data);
-        updateDashboardView(data);
-
-        // Refresh leaderboard / compare if visible
-        if (currentView === 'leaderboard') renderLeaderboard();
-        if (currentView === 'compare') runCompare();
-
-        // Fetch ML prediction for selected streamer
-        if (currentLogin) fetchMLPrediction(currentLogin);
-
-        setStatus('ok');
-    } catch (err) {
-        console.error('[StreamPulse] fetchDashboard error:', err);
-        setStatus('error');
-    }
-}
-
-function setStatus(state) {
-    const dot = document.getElementById('globalPulseDot');
-    const label = document.getElementById('topbarTitle');
-    if (state === 'ok') {
-        dot?.classList.remove('error');
-        if (label) label.textContent = `LIVE · Updated ${new Date().toLocaleTimeString('en-US', {hour12: false})}`;
     } else {
-        dot?.classList.add('error');
-        if (label) label.textContent = 'CONNECTION ERROR — RETRYING...';
+        insightBits.push(`${streamer.display_name} is currently offline, so the forecast layer is leaning on stored historical samples.`);
     }
+    insightBits.push(`Consistency is ${streamer.analytics.consistency_score}/100 across ${streamer.analytics.session_count} tracked sessions.`);
+    insightBits.push(`Momentum is running at ${streamer.analytics.trend_score} versus the current historical baseline.`);
+    if (state.ml?.status === "success") {
+        insightBits.push(`The model estimates a short-horizon peak near ${formatCompact(state.ml.predicted_peak)} viewers with ${state.ml.confidence_label} confidence.`);
+    } else {
+        insightBits.push("The model is still collecting enough samples to produce a trustworthy short-term forecast.");
+    }
+    if (latestAlert) {
+        insightBits.push(`Latest watchlist event: ${latestAlert.message}`);
+    }
+    elements.selectedInsight.textContent = insightBits.join(" ");
+    const snapshots = state.history?.recent_snapshots || streamer.recent_snapshots || [];
+    elements.forecastSamples.textContent = `${snapshots.length || 0} samples`;
 }
 
-// ═══════════════════════════════════════════════════════════
-// TOPBAR — Global stats chips
-// ═══════════════════════════════════════════════════════════
-function updateTopbarStats(data) {
-    const summary = data.summary || {};
-    animateCounter('chipLiveVal',     summary.live    || 0, null);
-    animateCounter('chipViewersVal',  summary.current_viewers || 0, fmtViewers);
-    animateCounter('chipTrackedVal',  summary.tracked || 0, null);
-}
-
-// ═══════════════════════════════════════════════════════════
-// SIDEBAR — Live list + alerts
-// ═══════════════════════════════════════════════════════════
-function updateSidebar(data) {
-    const streamers = data.streamers || [];
-    const alerts    = data.alerts    || [];
-
-    // Update pill live indicators
-    streamerList.forEach(login => {
-        const pill = document.getElementById(`pill-${login}`);
-        if (!pill) return;
-        const card = streamers.find(c => c.login === login);
-        if (card?.is_live) {
-            pill.classList.add('pill-live');
-        } else {
-            pill.classList.remove('pill-live');
-        }
-    });
-
-    // Sidebar live list — show live streamers sorted by viewers
-    const liveStreamers = streamers
-        .filter(c => c.is_live)
-        .sort((a, b) => b.viewer_count - a.viewer_count);
-
-    const liveList = document.getElementById('sidebarLiveList');
-    if (liveList) {
-        if (liveStreamers.length === 0) {
-            liveList.innerHTML = '<div class="sidebar-live-placeholder">No one live right now</div>';
-        } else {
-            liveList.innerHTML = liveStreamers.map(s => `
-                <div class="sidebar-live-item" onclick="selectStreamer('${s.login}')" title="${s.title || ''}">
-                    <div class="sidebar-live-dot"></div>
-                    <div class="sidebar-live-name">${s.display_name}</div>
-                    <div class="sidebar-live-viewers">${fmtViewers(s.viewer_count)}</div>
-                </div>
-            `).join('');
-        }
-    }
-
-    // Sidebar alerts
-    const alertFeed = document.getElementById('sidebarAlerts');
-    if (alertFeed) {
-        if (alerts.length === 0) {
-            alertFeed.innerHTML = '<div class="sidebar-live-placeholder">No events yet</div>';
-        } else {
-            alertFeed.innerHTML = alerts.slice(0, 8).map(a => `
-                <div class="sidebar-alert-item severity-${a.severity}">
-                    ${a.message}
-                </div>
-            `).join('');
-        }
-    }
-}
-
-// ═══════════════════════════════════════════════════════════
-// DASHBOARD VIEW — Profile card + KPI cards + chart
-// ═══════════════════════════════════════════════════════════
-function updateDashboardView(data) {
-    const streamers = data.streamers || [];
-    const card = streamers.find(s => s.login === currentLogin);
-    
-    // Always update global overview
-    updateGlobalOverview(data);
-
-    if (!card) {
-        document.getElementById('deepIntelligence').style.display = 'none';
+function renderLeaderboard() {
+    clearElement(elements.leaderboardList);
+    const leaderboards = state.dashboard?.leaderboards;
+    if (!leaderboards) {
         return;
     }
 
-    document.getElementById('deepIntelligence').style.display = 'block';
-    
-    updateProfileCard(card);
-    updateKPICards(card);
-    updateViewerChart(card);
-    updateAnomalyBanner(null); // will be updated by ML
-    updateIntelPanel(card);
-    updateDeepIntelligence(card, data);
-}
+    const sections = [
+        ["Live Now", leaderboards.live_now, "viewers"],
+        ["Best Peak", leaderboards.best_peak, "peak"],
+        ["Most Active", leaderboards.most_active, "sessions"],
+        ["Momentum", leaderboards.trend, "score"],
+    ];
 
-function updateGlobalOverview(data) {
-    const summary = data.summary || {};
-    // Top banner metrics
-    animateCounter('globalMetricViewers', summary.current_viewers || 0, fmtViewers);
-    animateCounter('globalMetricChannels', summary.live || 0, v => v.toLocaleString());
-    animateCounter('globalMetricGames', data.category_mix?.length || 0, v => v.toLocaleString());
-
-    // Top Streams List
-    const topStreams = (data.streamers || [])
-        .filter(s => s.is_live)
-        .sort((a, b) => b.viewer_count - a.viewer_count)
-        .slice(0, 5);
-        
-    const tsList = document.getElementById('topStreamsList');
-    if (tsList) {
-        tsList.innerHTML = topStreams.map(s => `
-            <div class="g-list-item" onclick="selectStreamer('${s.login}')" style="cursor:pointer">
-                <img src="${s.profile_image_url}" class="g-list-avatar">
-                <div class="g-list-info">
-                    <div class="g-list-name">${escHtml(s.display_name)}</div>
-                    <div class="g-list-sub">${escHtml(s.game_name)}</div>
-                </div>
-                <div class="g-list-stat">
-                    <div class="g-list-val" style="color:var(--accent-purple)">${fmtViewers(s.viewer_count)}</div>
-                    <div class="g-list-stat-sub">Peak</div>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    // Top Channels (Trending)
-    const topTrending = (data.streamers || [])
-        .sort((a, b) => (b.analytics?.trend_score || 0) - (a.analytics?.trend_score || 0))
-        .slice(0, 5);
-        
-    const tcList = document.getElementById('topChannelsList');
-    if (tcList) {
-        tcList.innerHTML = topTrending.map(s => `
-            <div class="g-list-item" onclick="selectStreamer('${s.login}')" style="cursor:pointer">
-                <img src="${s.profile_image_url}" class="g-list-avatar">
-                <div class="g-list-info">
-                    <div class="g-list-name">${escHtml(s.display_name)}</div>
-                    <div class="g-list-sub">${escHtml(s.game_name || s.title || 'Offline')}</div>
-                </div>
-                <div class="g-list-stat">
-                    <div class="g-list-val" style="color:var(--accent-cyan)">${s.analytics?.trend_score || 0}</div>
-                    <div class="g-list-stat-sub">Trend Score</div>
-                </div>
-            </div>
-        `).join('');
-    }
-}
-
-function updateDeepIntelligence(card, data) {
-    const analytics = card.analytics || {};
-    const liveViewers = card.is_live ? card.viewer_count : 0;
-    
-    // Performance Grid
-    el('kpiHoursStreamed').textContent = (analytics.avg_duration_minutes ? (analytics.avg_duration_minutes / 60).toFixed(1) : '0');
-    el('kpiAvgViewersSum').textContent = fmtViewers(analytics.avg_peak_viewers || 0);
-    el('kpiPeakViewersSum').textContent = fmtViewers(analytics.best_peak_viewers || liveViewers);
-    el('kpiHoursWatched').textContent = fmtViewers((analytics.avg_peak_viewers || 0) * (analytics.session_count || 1));
-    el('kpiFollowersGained').textContent = '+1.2K'; // Mock
-    el('kpiFollowersPerHour').textContent = '45'; // Mock
-    el('kpiGamesStreamed').textContent = card.groups?.length || 1;
-    el('kpiActiveDays').textContent = analytics.session_count || 1;
-
-    // Lifetime
-    el('ltTotalHours').textContent = '1,240';
-    el('ltHighestViewers').textContent = fmtViewers(analytics.best_peak_viewers || liveViewers);
-    el('ltTotalFollowers').textContent = '2.4M';
-    el('ltTotalGames').textContent = '42';
-
-    // Mock Popular Clips
-    const clips = document.getElementById('clipsGrid');
-    if (clips) {
-        clips.innerHTML = [1, 2, 3].map(i => `
-            <div class="clip-card">
-                <img class="clip-thumb" src="${card.profile_image_url}" style="filter: brightness(0.7) blur(2px);">
-                <div class="clip-views">1.2M views</div>
-                <div class="clip-title">Stream Highlight ${i}</div>
-            </div>
-        `).join('');
-    }
-
-    // Mock Heatmap
-    const heatmap = document.getElementById('scheduleHeatmap');
-    if (heatmap) {
-        let cells = '';
-        for (let j=0; j<7; j++) {
-            cells += '<div class="heatmap-col">';
-            for(let i=0; i<24; i++) {
-                const lvl = Math.floor(Math.random() * 5);
-                cells += `<div class="heatmap-cell" data-level="${lvl}" title="${j} ${i}:00"></div>`;
-            }
-            cells += '</div>';
-        }
-        heatmap.innerHTML = `<div class="heatmap-grid">${cells}</div>`;
-    }
-}
-
-function updateProfileCard(card) {
-    const avatarImg = document.getElementById('profileAvatar');
-    const placeholder = document.getElementById('profileAvatarPlaceholder');
-    const liveRing = document.getElementById('profileLiveRing');
-    const nameEl = document.getElementById('profileName');
-    const liveBadge = document.getElementById('profileLiveBadge');
-    const peakEl = document.getElementById('profilePeak');
-    const sessionsEl = document.getElementById('profileSessions');
-    const consistencyEl = document.getElementById('profileConsistency');
-    const linkEl = document.getElementById('profileLink');
-
-    if (nameEl) nameEl.textContent = card.display_name;
-
-    if (avatarImg && card.profile_image_url) {
-        avatarImg.src = card.profile_image_url;
-        avatarImg.style.display = 'block';
-        if (placeholder) placeholder.style.display = 'none';
-    } else if (placeholder) {
-        if (avatarImg) avatarImg.style.display = 'none';
-        placeholder.style.display = 'flex';
-        placeholder.textContent = card.display_name?.charAt(0)?.toUpperCase() || '?';
-    }
-
-    if (liveRing) {
-        liveRing.classList.toggle('live', card.is_live);
-    }
-
-    if (liveBadge) {
-        liveBadge.textContent = card.is_live ? '🔴 LIVE NOW' : 'OFFLINE';
-        liveBadge.className = 'profile-tag' + (card.is_live ? ' live-tag' : '');
-    }
-
-    const analytics = card.analytics || {};
-    if (peakEl) {
-        peakEl.textContent = analytics.best_peak_viewers
-            ? fmtViewers(analytics.best_peak_viewers)
-            : '—';
-    }
-    if (sessionsEl) sessionsEl.textContent = analytics.session_count ?? '—';
-    if (consistencyEl) consistencyEl.textContent = analytics.consistency_score != null
-        ? `${analytics.consistency_score}%`
-        : '—';
-
-    if (linkEl) {
-        linkEl.href = card.url || `https://www.twitch.tv/${card.login}`;
-    }
-
-    // Update Archetype Badge
-    const archetype = analytics.archetype || {};
-    const archBadge = document.getElementById('archetypeBadge');
-    if (archBadge) {
-        const nameEl = archBadge.querySelector('.archetype-name');
-        if (nameEl) nameEl.textContent = archetype.name || 'Analyzing...';
-        archBadge.title = archetype.desc || 'Still gathering behavioral data patterns.';
-    }
-
-    // Add game + group tags
-    const profileTags = document.getElementById('profileTags');
-    if (profileTags) {
-        const tags = [];
-        if (card.is_live) tags.push(`<span class="profile-tag live-tag">🔴 LIVE</span>`);
-        if (card.game_name) tags.push(`<span class="profile-tag">${escHtml(card.game_name)}</span>`);
-        if (card.broadcaster_type && card.broadcaster_type !== 'standard') {
-            tags.push(`<span class="profile-tag">${card.broadcaster_type.toUpperCase()}</span>`);
-        }
-        (card.groups || []).slice(0, 2).forEach(g => {
-            tags.push(`<span class="profile-tag">${escHtml(g)}</span>`);
-        });
-        profileTags.innerHTML = tags.join('');
-    }
-}
-
-function updateIntelPanel(card) {
-    const analytics = card.analytics || {};
-    
-    // Optimal Window
-    const hourly = analytics.hourly_activity || [];
-    const peakHour = hourly.indexOf(Math.max(...hourly));
-    const windowEl = document.getElementById('intelOptimalWindow');
-    if (windowEl) {
-        windowEl.textContent = peakHour >= 0 ? `${peakHour}:00 - ${peakHour + 2}:00` : 'Gathering data...';
-    }
-
-    // Description (Archetype)
-    const descEl = document.getElementById('archetypeDesc');
-    if (descEl && analytics.archetype) {
-        descEl.textContent = analytics.archetype.desc;
-    }
-
-    // Similar Streamers (Simulated or based on comparison)
-    const similarEl = document.getElementById('intelSimilarList');
-    if (similarEl && lastDashboardData) {
-        const others = lastDashboardData.streamers.filter(s => s.login !== card.login).slice(0, 3);
-        if (others.length > 0) {
-            similarEl.innerHTML = others.map(o => `
-                <span class="similar-streamer-tag" onclick="selectStreamer('${o.login}')" style="cursor:pointer">${o.display_name}</span>
-            `).join('');
+    for (const [title, rows, suffix] of sections) {
+        const card = createElement("section", { className: "leaderboard-card" });
+        card.appendChild(createElement("h3", { text: title }));
+        if (!rows.length) {
+            card.appendChild(createElement("p", { className: "empty-copy", text: "More tracked history is needed here." }));
         } else {
-            similarEl.textContent = 'None tracked';
+            const list = createElement("ol");
+            rows.forEach((row, index) => {
+                const item = createElement("li");
+                item.appendChild(createElement("span", { className: "leaderboard-rank", text: String(index + 1).padStart(2, "0") }));
+
+                const entry = createElement("div", { className: "leaderboard-entry" });
+                entry.appendChild(createElement("span", { className: "leaderboard-name", text: row.display_name }));
+                entry.appendChild(createElement("strong", { text: `${formatCompact(row.value)} ${suffix}` }));
+                entry.appendChild(createElement("small", { text: row.meta }));
+                item.appendChild(entry);
+                list.appendChild(item);
+            });
+            card.appendChild(list);
         }
+        elements.leaderboardList.appendChild(card);
     }
 }
 
-function updateKPICards(card) {
-    // Live viewers
-    const viewers = card.is_live ? card.viewer_count : 0;
-    animateCounter('kpiViewers', viewers, v => card.is_live ? fmtViewers(v) : 'OFFLINE');
-    el('kpiGame').textContent = card.is_live
-        ? (card.game_name || 'Unknown game')
-        : (card.title ? card.title.substring(0, 50) : 'Not streaming');
-
-    const statusBadge = document.getElementById('kpiBadgeStatus');
-    if (statusBadge) {
-        statusBadge.className = 'kpi-badge' + (card.is_live ? ' live-tag' : '');
-        statusBadge.textContent = card.is_live ? '🔴 LIVE' : 'OFFLINE';
-    }
-
-    // Uptime
-    el('kpiUptime').textContent = card.is_live ? (card.uptime || '—') : 'N/A';
-    const titleTxt = card.title
-        ? card.title.substring(0, 55) + (card.title.length > 55 ? '…' : '')
-        : 'No stream data';
-    el('kpiTitle').textContent = titleTxt;
-}
-
-// ═══════════════════════════════════════════════════════════
-// ML PREDICTION FETCH + KPI UPDATE
-// ═══════════════════════════════════════════════════════════
-async function fetchMLPrediction(login) {
-    try {
-        // First try the new /api/ml/predict/<login> endpoint
-        const res = await fetch(`/api/ml/predict/${login}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-
-        const pred = data.prediction || data;
-
-        // Always pre-generate a basic insight immediately so the card is never blank
-        generateAIInsightBasic(login);
-
-        if (pred.status === 'success') {
-            animateCounter('kpiPredict', pred.predicted_peak, fmtViewers);
-            el('kpiError').textContent = `Confidence: ±${fmtViewers(Math.round(pred.model_std_error || 0))}`;
-
-            const tBadge = document.getElementById('kpiBadgeTrend');
-            if (tBadge) {
-                tBadge.textContent = (pred.trend || 'stable').toUpperCase();
-                tBadge.className   = `kpi-badge ${pred.trend || 'stable'}`;
-            }
-
-            // Anomaly banner
-            updateAnomalyBanner(pred);
-
-            // Anomaly KPI card
-            if (pred.anomalies_detected) {
-                const lastA = pred.anomalies?.[pred.anomalies.length - 1];
-                el('kpiAnomalyStatus').textContent = '⚡ SPIKE';
-                el('kpiAnomalySub').textContent    = `Z-Score: ${lastA?.z_score?.toFixed(2) || '?'}`;
-                el('kpiBadgeAnomaly').textContent  = 'VIRAL';
-                el('kpiBadgeAnomaly').className    = 'kpi-badge declining';
-            } else {
-                el('kpiAnomalyStatus').textContent = 'CLEAR';
-                el('kpiAnomalySub').textContent    = 'No viral spikes detected';
-                el('kpiBadgeAnomaly').textContent  = 'NORMAL';
-                el('kpiBadgeAnomaly').className    = 'kpi-badge stable';
-            }
-
-            // Update chart with forecast
-            updateChartForecast(pred);
-
-            // Sentiment (simulated from viewer velocity in lieu of IRC)
-            updateSentimentCard(pred);
-
-            // AI Insight
-            generateAIInsight(login, pred);
-        } else {
-            el('kpiPredict').textContent = 'N/A';
-            el('kpiError').textContent   = 'Need more data';
-            generateAIInsightBasic(login);
-        }
-    } catch (err) {
-        console.warn('[StreamPulse] ML fetch failed:', err);
-        el('kpiPredict').textContent = 'N/A';
-        el('kpiError').textContent   = 'ML not available';
-        generateAIInsightBasic(login);
-    }
-}
-
-function updateAnomalyBanner(pred) {
-    const banner = document.getElementById('anomalyBanner');
-    if (!banner) return;
-    if (pred?.anomalies_detected) {
-        banner.style.display = 'flex';
-        const lastA = pred.anomalies?.[pred.anomalies.length - 1];
-        el('anomalyText').textContent = `⚡ VIRAL ANOMALY DETECTED — ${fmtViewers(lastA?.viewer_count || 0)} VIEWERS`;
-        el('anomalyBadge').textContent = `Z-SCORE: ${lastA?.z_score?.toFixed(2) || '?'}`;
-    } else {
-        banner.style.display = 'none';
-    }
-}
-
-function updateSentimentCard(pred) {
-    // Derive proxy sentiment from viewership trend when no IRC is connected
-    const trend = pred.trend || 'stable';
-    const score = trend === 'growing' ? +(0.55 + Math.random() * 0.35).toFixed(2)
-                : trend === 'declining' ? +(0.1 + Math.random() * 0.3).toFixed(2)
-                : +(0.3 + Math.random() * 0.3).toFixed(2);
-    const vol   = +(Math.random() * 0.18 + 0.04).toFixed(3);
-
-    el('kpiSentiment').textContent   = score.toFixed(2);
-    el('kpiSentimentVol').textContent = `Volatility: ±${vol}`;
-
-    const sBadge = document.getElementById('kpiBadgeSentiment');
-    if (sBadge) {
-        if (score > 0.65)      { sBadge.textContent = '🔥 HYPE';    sBadge.className = 'kpi-badge hype'; }
-        else if (score > 0.4)  { sBadge.textContent = '😎 CHILL';   sBadge.className = 'kpi-badge stable'; }
-        else                   { sBadge.textContent = '😴 QUIET';   sBadge.className = 'kpi-badge'; }
-    }
-}
-
-// ═══════════════════════════════════════════════════════════
-// AI INSIGHT GENERATOR
-// ═══════════════════════════════════════════════════════════
-function generateAIInsight(login, pred) {
-    const card = (lastDashboardData?.streamers || []).find(s => s.login === login);
-    if (!card) return;
-
-    const name = card.display_name;
-    const viewers = card.viewer_count;
-    const trend = pred.trend;
-    const predicted = pred.predicted_peak;
-    const stdErr = Math.round(pred.model_std_error || 0);
-    const hasAnomaly = pred.anomalies_detected;
-    const analytics = card.analytics || {};
-    const avgPeak = analytics.avg_peak_viewers || 0;
-
-    const trendPhrase = trend === 'growing'   ? 'trending UP with accelerating viewership'
-                      : trend === 'declining' ? 'trending DOWN — viewership contracting'
-                      : 'holding STEADY with stable engagement';
-
-    const anomalyPhrase = hasAnomaly
-        ? `⚡ ANOMALY DETECTED: Unusual growth rate detected (possible raid or viral clip). `
-        : '';
-
-    const benchmarkPhrase = avgPeak > 0 && viewers > 0
-        ? `Current viewership is ${viewers > avgPeak * 1.1 ? 'ABOVE' : viewers < avgPeak * 0.85 ? 'BELOW' : 'IN LINE WITH'} their historical average of ${fmtViewers(avgPeak)}. `
-        : '';
-
-    const confidenceNote = stdErr < 1000 ? 'Model confidence: HIGH.' : stdErr < 5000 ? 'Model confidence: MODERATE.' : 'Model confidence: LOW (limited data).';
-
-    const insight = `${anomalyPhrase}${name} is ${trendPhrase} with ${fmtViewers(viewers)} concurrent viewers live right now. ` +
-        `${benchmarkPhrase}` +
-        `Polynomial OLS regression predicts a peak of ${fmtViewers(predicted)} in the next 30 minutes (±${fmtViewers(stdErr)}). ` +
-        `${confidenceNote}`;
-
-    el('aiInsightText').textContent = insight;
-}
-
-function generateAIInsightBasic(login) {
-    const card = (lastDashboardData?.streamers || []).find(s => s.login === login);
-    const displayName = login;
-
-    if (!card) {
-        el('aiInsightText').textContent =
-            `Loading intelligence data for ${displayName}... Waiting for next data poll.`;
+function renderGroupSummary() {
+    clearElement(elements.groupSummary);
+    const groups = state.dashboard?.group_summary || [];
+    if (!groups.length) {
+        appendEmptyState(elements.groupSummary, "Group data appears after the watchlist is configured.");
         return;
     }
-    const name = card.display_name;
-    if (card.is_live) {
-        el('aiInsightText').textContent =
-            `${name} is currently live with ${fmtViewers(card.viewer_count)} concurrent viewers. ` +
-            `Playing ${card.game_name || 'an unlisted category'}. Prediction model requires more data points — check back in a few minutes.`;
-    } else {
-        el('aiInsightText').textContent =
-            `${name} is currently offline. Historical data shows ${fmtViewers(card.analytics?.avg_peak_viewers || 0)} average peak viewers across ${card.analytics?.session_count || 0} tracked sessions.`;
+
+    const maxViewers = Math.max(...groups.map((group) => group.current_viewers), 1);
+    for (const group of groups) {
+        const row = createElement("article", { className: "stack-row" });
+        const top = createElement("div", { className: "stack-copy" });
+        top.appendChild(createElement("span", { text: group.name }));
+        top.appendChild(createElement("strong", { text: `${formatCompact(group.current_viewers)} viewers` }));
+        row.appendChild(top);
+
+        const track = createElement("div", { className: "stack-track" });
+        const fill = createElement("span");
+        fill.style.width = `${(group.current_viewers / maxViewers) * 100}%`;
+        track.appendChild(fill);
+        row.appendChild(track);
+        row.appendChild(createElement("p", { className: "session-meta", text: `${group.live}/${group.tracked} channels live` }));
+        elements.groupSummary.appendChild(row);
     }
 }
 
-// ═══════════════════════════════════════════════════════════
-// MAIN VIEWER CHART
-// ═══════════════════════════════════════════════════════════
-function updateViewerChart(card) {
-    const snapshots = card.recent_snapshots || [];
+function renderBarList(container, items) {
+    clearElement(container);
+    if (!items.length) {
+        appendEmptyState(container, "Not enough historical structure yet.");
+        return;
+    }
+
+    const maxValue = Math.max(...items.map((item) => item.value), 1);
+    for (const item of items) {
+        const row = createElement("article", { className: "bar-row" });
+        const top = createElement("div", { className: "bar-copy" });
+        top.appendChild(createElement("span", { text: item.name }));
+        top.appendChild(createElement("strong", { text: formatCompact(item.value) }));
+        row.appendChild(top);
+
+        const track = createElement("div", { className: "bar-track" });
+        const fill = createElement("span");
+        fill.style.width = `${(item.value / maxValue) * 100}%`;
+        track.appendChild(fill);
+        row.appendChild(track);
+        container.appendChild(row);
+    }
+}
+
+function renderAlerts() {
+    clearElement(elements.alertsFeed);
+    const alerts = state.dashboard?.alerts || [];
+    if (!alerts.length) {
+        appendEmptyState(elements.alertsFeed, "No watchlist events have fired yet.");
+        return;
+    }
+
+    for (const alert of alerts) {
+        const row = createElement("article", { className: `alert-row severity-${alert.severity}` });
+        const copy = createElement("div");
+        copy.appendChild(createElement("strong", { text: alert.display_name }));
+        copy.appendChild(createElement("p", { text: alert.message }));
+        row.appendChild(copy);
+        row.appendChild(createElement("div", { className: "alert-time", text: formatDateTime(alert.created_at) }));
+        elements.alertsFeed.appendChild(row);
+    }
+}
+
+function formatSession(session) {
+    return `${formatDateTime(session.started_at)} · ${session.game_name || "Unknown"} · peak ${formatCompact(session.peak_viewers || 0)} · avg ${formatCompact(session.avg_viewers || 0)} · ${formatMinutes(session.duration_minutes || 0)}`;
+}
+
+function renderSessions() {
+    clearElement(elements.sessionList);
+    const sessions = state.history?.recent_sessions || getSelectedStreamer()?.recent_sessions || [];
+    if (!sessions.length) {
+        appendEmptyState(elements.sessionList, "Run the tracker longer to build a stronger session archive.");
+        return;
+    }
+
+    for (const session of sessions) {
+        const row = createElement("article", { className: "session-row" });
+        const copy = createElement("div", { className: "session-copy" });
+        copy.appendChild(createElement("strong", { text: session.title || "Untitled session" }));
+        copy.appendChild(createElement("p", { text: formatSession(session) }));
+        row.appendChild(copy);
+        row.appendChild(createElement("div", { className: `session-meta session-badge ${session.ended_at ? "is-complete" : "is-active"}`, text: session.ended_at ? "Completed" : "Active" }));
+        elements.sessionList.appendChild(row);
+    }
+}
+
+function renderTrackedGrid() {
+    clearElement(elements.trackedGrid);
+    const streamers = state.dashboard?.streamers || [];
+    if (!streamers.length) {
+        appendEmptyState(elements.trackedGrid, "Tracked creators will appear here after the dashboard connects.");
+        return;
+    }
+
+    for (const streamer of streamers) {
+        const card = createElement("article", { className: `tracked-card ${state.selectedLogin === streamer.login ? "is-focused" : ""}` });
+        const top = createElement("div", { className: "tracked-topline" });
+        const identity = createElement("div", { className: "tracked-identity" });
+        identity.appendChild(
+            createElement("img", {
+                className: "tracked-avatar",
+                attrs: {
+                    alt: `${streamer.display_name} avatar`,
+                    src: streamer.profile_image_url || "https://static-cdn.jtvnw.net/jtv_user_pictures/xarth/404_user_70x70.png",
+                    loading: "lazy",
+                },
+            })
+        );
+        const copy = createElement("div");
+        copy.appendChild(createElement("h3", { text: streamer.display_name }));
+        copy.appendChild(createElement("p", { text: streamer.title || "No live title available." }));
+        identity.appendChild(copy);
+        top.appendChild(identity);
+        top.appendChild(createElement("span", { className: `pill ${streamer.is_live ? "growing" : "neutral"}`, text: streamer.is_live ? "Live" : "Offline" }));
+        card.appendChild(top);
+
+        const meta = createElement("div", { className: "tracked-meta" });
+        meta.appendChild(createElement("span", { text: `${formatCompact(streamer.viewer_count)} viewers` }));
+        meta.appendChild(createElement("span", { text: `${streamer.analytics.trend_score} trend` }));
+        card.appendChild(meta);
+
+        const stats = createElement("div", { className: "tracked-stats" });
+        stats.appendChild(createElement("span", { className: "tracked-stat", text: streamer.game_name || "Offline" }));
+        stats.appendChild(createElement("span", { className: "tracked-stat", text: `${streamer.analytics.best_peak_viewers ? formatCompact(streamer.analytics.best_peak_viewers) : "—"} peak` }));
+        stats.appendChild(createElement("span", { className: "tracked-stat", text: `${streamer.analytics.session_count} sessions` }));
+        card.appendChild(stats);
+
+        const actions = createElement("div", { className: "tracked-actions" });
+        const focusButton = createElement("button", {
+            className: "tracked-button",
+            text: state.selectedLogin === streamer.login ? "Focused" : "Focus",
+            attrs: { type: "button" },
+        });
+        focusButton.addEventListener("click", () => {
+            focusStreamer(streamer.login).catch((error) => {
+                showBanner(`Unable to focus streamer: ${error.message}`, "error");
+            });
+        });
+        const removeButton = createElement("button", {
+            className: "tracked-button tracked-button-secondary",
+            text: "Remove",
+            attrs: { type: "button" },
+        });
+        removeButton.addEventListener("click", () => {
+            removeStreamer(streamer.login).catch((error) => {
+                showBanner(`Unable to remove streamer: ${error.message}`, "error");
+            });
+        });
+        actions.appendChild(focusButton);
+        actions.appendChild(removeButton);
+        card.appendChild(actions);
+        elements.trackedGrid.appendChild(card);
+    }
+}
+
+function renderPlayer() {
+    const streamer = getSelectedStreamer();
+    if (!streamer || !streamer.login) {
+        elements.playerFrame.classList.add("hidden");
+        elements.playerState.classList.remove("hidden");
+        elements.playerState.textContent = "Choose a streamer to load the embedded Twitch player.";
+        elements.playerMeta.textContent = "The player uses Twitch's official embed and follows the current host domain automatically.";
+        return;
+    }
+
+    const src = getTwitchEmbedUrl(streamer.login);
+    if (elements.playerFrame.getAttribute("src") !== src) {
+        elements.playerFrame.setAttribute("src", src);
+    }
+
+    elements.playerFrame.classList.remove("hidden");
+    elements.playerState.classList.add("hidden");
+    elements.playerMeta.textContent = streamer.is_live
+        ? `Watching ${streamer.display_name} live inside the app. If playback is blocked, open the channel in a new tab.`
+        : `${streamer.display_name} is offline right now. The embedded player stays ready for the next live session.`;
+}
+
+function renderChart() {
+    const snapshots = state.history?.recent_snapshots || getSelectedStreamer()?.recent_snapshots || [];
+    const ml = state.ml?.status === "success" ? state.ml : null;
+
+    if (!chartAvailable) {
+        elements.chartState.textContent = "Chart.js did not load, so the graph is unavailable right now. The rest of the dashboard will still work.";
+        elements.chartState.classList.remove("hidden");
+        return;
+    }
+
+    if (!snapshots.length) {
+        elements.chartState.textContent = "No viewer history yet. Let the tracker collect more samples to unlock the forecast canvas.";
+        elements.chartState.classList.remove("hidden");
+    } else {
+        elements.chartState.classList.add("hidden");
+    }
+
     const labels = [];
-    const realData = [];
+    const actual = [];
     let lastTime = null;
 
-    snapshots.forEach(s => {
-        const d = new Date(s.timestamp);
-        const label = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        labels.push(label);
-        realData.push(s.viewers);
-        lastTime = d;
-    });
-
-    el('chartTitle').textContent = `${card.display_name} — Viewer Timeline`;
-    el('chartMeta').textContent  = `${snapshots.length} data points`;
-
-    renderMainChart(labels, realData, [], [], []);
-}
-
-function updateChartForecast(pred) {
-    if (!mainChartInstance || !pred?.forecast?.length) return;
-
-    const labels   = [...mainChartInstance.data.labels];
-    const realData = [...mainChartInstance.data.datasets[0].data];
-
-    // Remove old forecast points
-    const realCount = realData.filter(d => d !== null).length;
-    while (labels.length > realCount) labels.pop();
-
-    const forecastArr = new Array(realCount).fill(null);
-    const upperArr    = new Array(realCount).fill(null);
-    const lowerArr    = new Array(realCount).fill(null);
-
-    // Connect last real point to forecast
-    if (realCount > 0) {
-        forecastArr[realCount - 1] = realData[realCount - 1];
-        upperArr[realCount - 1]    = realData[realCount - 1];
-        lowerArr[realCount - 1]    = realData[realCount - 1];
+    for (const snapshot of snapshots) {
+        const date = new Date(snapshot.timestamp);
+        labels.push(date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+        actual.push(snapshot.viewers ?? snapshot.viewer_count ?? 0);
+        lastTime = date;
     }
 
-    const baseTime = mainChartInstance._lastTime || Date.now();
-    pred.forecast.forEach(f => {
-        const fd = new Date(baseTime + f.minute_offset * 60_000);
-        labels.push(fd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-        forecastArr.push(f.predicted_viewers);
-        upperArr.push(f.upper_bound);
-        lowerArr.push(f.lower_bound);
-    });
+    const forecast = new Array(actual.length).fill(null);
+    const upper = new Array(actual.length).fill(null);
+    const lower = new Array(actual.length).fill(null);
 
-    mainChartInstance.data.labels             = labels;
-    mainChartInstance.data.datasets[0].data   = [...realData, ...new Array(pred.forecast.length).fill(null)];
-    mainChartInstance.data.datasets[1].data   = forecastArr;
-    mainChartInstance.data.datasets[2].data   = upperArr;
-    mainChartInstance.data.datasets[3].data   = lowerArr;
-    mainChartInstance.update('none');
-}
+    if (ml && lastTime) {
+        if (actual.length) {
+            const lastValue = actual[actual.length - 1];
+            forecast[actual.length - 1] = lastValue;
+            upper[actual.length - 1] = lastValue;
+            lower[actual.length - 1] = lastValue;
+        }
 
-function buildChartGlobals() {
-    Chart.defaults.color       = '#8b95a8';
-    Chart.defaults.font.family = "'JetBrains Mono', monospace";
-    Chart.defaults.font.size   = 11;
-}
-buildChartGlobals();
+        for (const point of ml.forecast) {
+            const futureTime = new Date(lastTime.getTime() + point.minute_offset * 60000);
+            labels.push(futureTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+            actual.push(null);
+            forecast.push(point.predicted_viewers);
+            upper.push(point.upper_bound);
+            lower.push(point.lower_bound);
+        }
+    }
 
-function renderMainChart(labels, realData, forecast, upper, lower) {
-    const canvas = document.getElementById('mainChart');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = elements.mainChart.getContext("2d");
+    const gradient = ctx.createLinearGradient(0, 0, 0, 320);
+    gradient.addColorStop(0, "rgba(215, 255, 56, 0.34)");
+    gradient.addColorStop(1, "rgba(215, 255, 56, 0)");
 
-    const purpleGrad = ctx.createLinearGradient(0, 0, 0, 300);
-    purpleGrad.addColorStop(0, 'rgba(168,85,247,0.3)');
-    purpleGrad.addColorStop(1, 'rgba(168,85,247,0.0)');
-
-    if (mainChartInstance) {
-        mainChartInstance.data.labels             = labels;
-        mainChartInstance.data.datasets[0].data   = realData;
-        mainChartInstance.data.datasets[1].data   = forecast;
-        mainChartInstance.data.datasets[2].data   = upper;
-        mainChartInstance.data.datasets[3].data   = lower;
-        mainChartInstance.update();
-        mainChartInstance._lastTime = Date.now();
+    if (state.chart) {
+        state.chart.data.labels = labels;
+        state.chart.data.datasets[0].data = actual;
+        state.chart.data.datasets[1].data = forecast;
+        state.chart.data.datasets[2].data = upper;
+        state.chart.data.datasets[3].data = lower;
+        state.chart.update();
         return;
     }
 
-    mainChartInstance = new Chart(ctx, {
-        type: 'line',
+    state.chart = new Chart(ctx, {
+        type: "line",
         data: {
             labels,
             datasets: [
                 {
-                    label: 'Actual Viewers',
-                    data: realData,
-                    borderColor: '#a855f7',
-                    backgroundColor: purpleGrad,
-                    borderWidth: 2.5,
-                    tension: 0.4,
-                    pointRadius: 3,
-                    pointHoverRadius: 6,
-                    pointBackgroundColor: '#a855f7',
-                    pointBorderColor: '#0e1118',
-                    pointBorderWidth: 2,
+                    label: "Actual",
+                    data: actual,
+                    borderColor: "#d7ff38",
+                    backgroundColor: gradient,
                     fill: true,
+                    tension: 0.32,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    borderWidth: 3,
                 },
                 {
-                    label: 'Predicted',
+                    label: "Forecast",
                     data: forecast,
-                    borderColor: '#22d3ee',
-                    borderWidth: 2,
-                    borderDash: [6, 4],
-                    tension: 0.4,
+                    borderColor: "#6fffd2",
+                    borderWidth: 3,
+                    borderDash: [8, 8],
                     pointRadius: 0,
-                    fill: false,
+                    tension: 0.28,
                 },
                 {
-                    label: 'Upper Bound',
+                    label: "Upper bound",
                     data: upper,
-                    borderColor: 'rgba(34,211,238,0.2)',
-                    backgroundColor: 'rgba(34,211,238,0.05)',
-                    borderWidth: 1,
-                    borderDash: [3, 4],
-                    fill: '+1',
-                    tension: 0.4,
+                    borderColor: "rgba(255, 176, 0, 0.75)",
+                    borderWidth: 1.5,
                     pointRadius: 0,
+                    tension: 0.28,
                 },
                 {
-                    label: 'Lower Bound',
+                    label: "Lower bound",
                     data: lower,
-                    borderColor: 'rgba(34,211,238,0.2)',
-                    backgroundColor: 'transparent',
-                    borderWidth: 1,
-                    borderDash: [3, 4],
-                    fill: false,
-                    tension: 0.4,
+                    borderColor: "rgba(255, 176, 0, 0.28)",
+                    borderWidth: 1.5,
                     pointRadius: 0,
+                    tension: 0.28,
                 },
             ],
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation: { duration: 600, easing: 'easeInOutCubic' },
-            interaction: { mode: 'index', intersect: false },
+            interaction: {
+                mode: "index",
+                intersect: false,
+            },
             plugins: {
                 legend: {
                     labels: {
-                        filter: item => !item.text.includes('Bound'),
-                        color: '#8b95a8',
                         usePointStyle: true,
-                        pointStyleWidth: 10,
-                        boxHeight: 6,
+                        boxWidth: 10,
                     },
                 },
                 tooltip: {
-                    backgroundColor: 'rgba(14,17,24,0.95)',
-                    titleColor: '#f0f4ff',
-                    bodyColor: '#8b95a8',
-                    borderColor: 'rgba(255,255,255,0.1)',
-                    borderWidth: 1,
-                    padding: 12,
-                    cornerRadius: 10,
-                    callbacks: {
-                        label: ctx => {
-                            const v = ctx.parsed.y;
-                            return v != null ? ` ${fmtViewers(v)} viewers` : null;
-                        },
-                    },
+                    backgroundColor: "#090908",
+                    titleColor: "#f4f1e8",
+                    bodyColor: "#c5bdab",
+                    borderColor: "#f4f1e8",
+                    borderWidth: 2,
                 },
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255,255,255,0.04)' },
-                    border: { color: 'rgba(255,255,255,0.08)' },
-                    ticks: { color: '#4a5568', maxTicksLimit: 8 },
+                    grid: {
+                        color: "rgba(244, 241, 232, 0.12)",
+                    },
+                    ticks: {
+                        maxTicksLimit: 8,
+                    },
                 },
                 y: {
-                    grid: { color: 'rgba(255,255,255,0.04)' },
-                    border: { color: 'rgba(255,255,255,0.08)' },
-                    ticks: {
-                        color: '#4a5568',
-                        callback: v => fmtViewers(v),
-                    },
                     beginAtZero: true,
+                    grid: {
+                        color: "rgba(244, 241, 232, 0.12)",
+                    },
                 },
             },
         },
     });
-    mainChartInstance._lastTime = Date.now();
 }
 
-// ═══════════════════════════════════════════════════════════
-// COMPARE VIEW
-// ═══════════════════════════════════════════════════════════
-async function runCompare() {
-    const loginA = document.getElementById('compareSelectA')?.value;
-    const loginB = document.getElementById('compareSelectB')?.value;
-    if (!loginA || !loginB) return;
+function renderSearchResults() {
+    clearElement(elements.searchResults);
+    const query = state.searchQuery.trim();
+    if (!query || query.length < 2) {
+        elements.searchResults.classList.add("hidden");
+        return;
+    }
 
-    const grid = document.getElementById('compareGrid');
-    if (grid) grid.innerHTML = '<div class="compare-loading">Loading comparison...</div>';
+    elements.searchResults.classList.remove("hidden");
+    if (!state.searchResults.length) {
+        elements.searchResults.appendChild(createElement("div", { className: "search-empty", text: "No matching channels found." }));
+        return;
+    }
+
+    for (const result of state.searchResults) {
+        const row = createElement("div", { className: "search-row" });
+
+        const profile = createElement("div", { className: "search-row-main" });
+        const avatar = createElement("img", {
+            className: "search-avatar",
+            attrs: {
+                alt: `${result.display_name} avatar`,
+                src: result.profile_image_url || "https://static-cdn.jtvnw.net/jtv_user_pictures/xarth/404_user_70x70.png",
+                loading: "lazy",
+            },
+        });
+        profile.appendChild(avatar);
+
+        const copy = createElement("div", { className: "search-row-copy" });
+        copy.appendChild(createElement("strong", { text: result.display_name }));
+        copy.appendChild(
+            createElement("span", {
+                text: result.is_live ? `${result.game_name || "Live"} • live now` : result.game_name || "Offline",
+            })
+        );
+        profile.appendChild(copy);
+        row.appendChild(profile);
+
+        const button = createElement("button", {
+            className: `search-action ${result.is_tracked ? "disabled" : ""}`,
+            text: result.is_tracked ? "Tracked" : "Add",
+            attrs: { type: "button", disabled: result.is_tracked ? "disabled" : null },
+        });
+        if (!result.is_tracked) {
+            button.addEventListener("click", () => {
+                addStreamer(result.login).catch((error) => {
+                    showBanner(`Unable to add streamer: ${error.message}`, "error");
+                });
+            });
+        }
+        row.appendChild(button);
+        elements.searchResults.appendChild(row);
+    }
+}
+
+function renderAll() {
+    renderHero();
+    renderMissionStrip();
+    renderCommandCenter();
+    renderSelect();
+    renderKPIs();
+    renderProfile();
+    renderLeaderboard();
+    renderGroupSummary();
+    renderBarList(elements.categoryMix, state.dashboard?.category_mix || []);
+    renderAlerts();
+    renderSessions();
+    renderTrackedGrid();
+    renderChart();
+    renderPlayer();
+    renderSearchResults();
+}
+
+async function fetchJson(url, options = {}) {
+    const response = await fetch(url, { cache: "no-store", ...options });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.detail || data.error || "Request failed");
+    }
+    return data;
+}
+
+async function sendJson(url, method, body) {
+    return fetchJson(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined,
+    });
+}
+
+async function refreshStreamData() {
+    if (!state.selectedLogin) {
+        state.history = null;
+        state.ml = null;
+        return;
+    }
+
+    const [historyResult, mlResult] = await Promise.allSettled([
+        fetchJson(`/api/history/${encodeURIComponent(state.selectedLogin)}`),
+        fetchJson(`/api/ml/predict/${encodeURIComponent(state.selectedLogin)}`),
+    ]);
+
+    state.history = historyResult.status === "fulfilled" ? historyResult.value : null;
+    state.ml = mlResult.status === "fulfilled" ? mlResult.value : null;
+}
+
+async function refreshDashboard({ force = false } = {}) {
+    const params = new URLSearchParams();
+    if (force) {
+        params.set("refresh", "1");
+    }
+    if (state.selectedLogin) {
+        params.set("selected", state.selectedLogin);
+    }
+
+    const workspaceUrl = `/api/workspace${params.toString() ? `?${params.toString()}` : ""}`;
+    const workspace = await fetchJson(workspaceUrl);
+    state.config = workspace.config || state.config;
+    state.health = workspace.health || state.health;
+    state.dashboard = workspace.dashboard?.streamers?.length ? workspace.dashboard : buildFallbackDashboard();
+    state.command = workspace.command_center || buildFallbackCommandCenter();
+    state.anomalySummary = workspace.anomaly_summary || buildFallbackAnomalySummary();
+    state.integration = workspace.integration || null;
+
+    if (!state.health?.configured) {
+        if (!state.selectedLogin && workspace.selected_streamer?.login) {
+            state.selectedLogin = workspace.selected_streamer.login;
+        } else if (!state.selectedLogin && state.dashboard.streamers[0]) {
+            state.selectedLogin = state.dashboard.streamers[0].login;
+        }
+        showBanner("Credential mode is active. Add Twitch credentials in twitch_checker/config.json or .env to unlock live telemetry and search.", "warning");
+        await refreshStreamData();
+        renderAll();
+        return;
+    }
+
+    hideBanner();
+    if (!state.selectedLogin || !state.dashboard.streamers.some((streamer) => streamer.login === state.selectedLogin)) {
+        state.selectedLogin = workspace.selected_streamer?.login || state.dashboard.streamers[0]?.login || "";
+    }
+    await refreshStreamData();
+    renderAll();
+}
+
+async function focusStreamer(login) {
+    state.selectedLogin = login;
+    renderAll();
+    await refreshStreamData();
+    renderAll();
+}
+
+function setupPolling(intervalSeconds) {
+    if (state.intervalId) {
+        window.clearInterval(state.intervalId);
+    }
+    state.intervalId = window.setInterval(() => {
+        refreshDashboard().catch((error) => {
+            showBanner(`Refresh failed: ${error.message}`, "error");
+        });
+    }, Math.max(intervalSeconds, 20) * 1000);
+}
+
+function hideSearchResults() {
+    state.searchQuery = "";
+    state.searchResults = [];
+    if (elements.searchInput) {
+        elements.searchInput.value = "";
+    }
+    renderSearchResults();
+}
+
+async function performSearch(query) {
+    if (!state.health?.configured) {
+        state.searchResults = [];
+        renderSearchResults();
+        return;
+    }
+
+    state.searchResults = await fetchJson(`/api/search?q=${encodeURIComponent(query)}`);
+    renderSearchResults();
+}
+
+async function addStreamer(login) {
+    await sendJson("/api/watchlist", "POST", { login });
+    hideSearchResults();
+    await refreshDashboard({ force: true });
+    await focusStreamer(login);
+}
+
+async function removeStreamer(login) {
+    const confirmed = window.confirm(`Remove ${login} from the watchlist?`);
+    if (!confirmed) {
+        return;
+    }
+
+    await fetchJson(`/api/watchlist/${encodeURIComponent(login)}`, { method: "DELETE" });
+    if (state.selectedLogin === login) {
+        state.selectedLogin = "";
+        state.history = null;
+        state.ml = null;
+    }
+    await refreshDashboard({ force: true });
+}
+
+function bindSearchInput() {
+    elements.searchInput.addEventListener("input", (event) => {
+        const query = event.target.value.trim();
+        state.searchQuery = query;
+
+        window.clearTimeout(state.searchTimer);
+        if (query.length < 2) {
+            state.searchResults = [];
+            renderSearchResults();
+            return;
+        }
+
+        state.searchTimer = window.setTimeout(() => {
+            performSearch(query).catch((error) => {
+                showBanner(`Search failed: ${error.message}`, "error");
+            });
+        }, 250);
+    });
+
+    document.addEventListener("click", (event) => {
+        const searchShell = event.target.closest(".search-shell");
+        if (!searchShell && !elements.searchResults.classList.contains("hidden")) {
+            state.searchQuery = "";
+            state.searchResults = [];
+            elements.searchResults.classList.add("hidden");
+        }
+    });
+}
+
+async function bootstrap() {
+    elements.refreshButton.addEventListener("click", () => {
+        refreshDashboard({ force: true }).catch((error) => {
+            showBanner(`Refresh failed: ${error.message}`, "error");
+        });
+    });
+
+    elements.streamerSelect.addEventListener("change", (event) => {
+        focusStreamer(event.target.value).catch((error) => {
+            showBanner(`Unable to load streamer details: ${error.message}`, "error");
+        });
+    });
+
+    elements.removeStreamerButton.addEventListener("click", () => {
+        if (!state.selectedLogin) {
+            return;
+        }
+        removeStreamer(state.selectedLogin).catch((error) => {
+            showBanner(`Unable to remove streamer: ${error.message}`, "error");
+        });
+    });
+
+    bindSearchInput();
 
     try {
-        const res = await fetch(`/api/analytics/compare?logins=${loginA},${loginB}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        renderCompare(data, loginA, loginB);
-    } catch (err) {
-        console.error('[StreamPulse] compare error:', err);
-        if (grid) grid.innerHTML = '<div class="compare-loading">Could not load comparison data</div>';
+        await refreshDashboard();
+        setupPolling(state.config?.check_interval || 60);
+        hideLoadingScreen();
+    } catch (error) {
+        showBanner(`Application bootstrap failed: ${error.message}`, "error");
+        hideLoadingScreen();
     }
 }
 
-function renderCompare(data, loginA, loginB) {
-    const streamers = data.streamers || [];
-    const cardA = streamers.find(s => s.login === loginA);
-    const cardB = streamers.find(s => s.login === loginB);
-    const grid  = document.getElementById('compareGrid');
-    if (!grid || !cardA || !cardB) return;
-
-    const metrics = [
-        { label: 'Live Viewers',     keyA: cardA.viewer_count,         keyB: cardB.viewer_count,         fmt: fmtViewers,   higher: true },
-        { label: 'Best Peak Ever',   keyA: cardA.best_peak_viewers,    keyB: cardB.best_peak_viewers,    fmt: fmtViewers,   higher: true },
-        { label: 'Avg Peak',         keyA: cardA.avg_peak_viewers,     keyB: cardB.avg_peak_viewers,     fmt: fmtViewers,   higher: true },
-        { label: 'Sessions Tracked', keyA: cardA.session_count,        keyB: cardB.session_count,        fmt: v => v,       higher: true },
-        { label: 'Avg Stream Len',   keyA: cardA.avg_duration_minutes, keyB: cardB.avg_duration_minutes, fmt: v => `${v}m`, higher: true },
-        { label: 'Consistency Score',keyA: cardA.consistency_score,    keyB: cardB.consistency_score,    fmt: v => `${v}%`, higher: true },
-        { label: 'Trend Score',      keyA: cardA.trend_score,          keyB: cardB.trend_score,          fmt: v => `${v}`,  higher: true },
-        { label: 'Top Category',     keyA: cardA.top_category,        keyB: cardB.top_category,          fmt: v => v,       higher: false },
-    ];
-
-    function buildCard(card, otherCard, side) {
-        const rows = metrics.map(m => {
-            const myVal    = m.keyA === card.viewer_count ? (side === 'A' ? m.keyA : m.keyB) : m[`key${side === 'A' ? 'A' : 'B'}`];
-            // re-derive
-            const vA = m.keyA, vB = m.keyB;
-            const isWinner = m.higher
-                ? (side === 'A' ? vA > vB : vB > vA)
-                : false;
-            const displayVal = side === 'A' ? vA : vB;
-            return `
-                <div class="compare-stat-row">
-                    <span class="compare-stat-label">${m.label}</span>
-                    <span class="compare-stat-value">
-                        ${m.fmt(displayVal ?? '—')}
-                        ${isWinner && m.higher && typeof displayVal === 'number' ? '<span class="compare-winner-badge">LEADING</span>' : ''}
-                    </span>
-                </div>
-            `;
-        }).join('');
-
-        const isLive = card.is_live;
-        return `
-            <div class="compare-card">
-                <div class="compare-card-name">${escHtml(card.display_name)}</div>
-                <div class="compare-card-live">
-                    <div class="sidebar-live-dot ${isLive ? '' : 'offline'}"></div>
-                    <span style="color:${isLive ? 'var(--accent-green)' : 'var(--text-muted)'}">
-                        ${isLive ? `LIVE NOW · ${fmtViewers(card.viewer_count)} viewers` : 'OFFLINE'}
-                    </span>
-                </div>
-                ${rows}
-            </div>
-        `;
-    }
-
-    grid.innerHTML = buildCard(cardA, cardB, 'A') + buildCard(cardB, cardA, 'B');
-
-    // Compare chart
-    renderCompareChart(cardA, cardB);
-}
-
-function renderCompareChart(cardA, cardB) {
-    const chartCard = document.getElementById('compareChartCard');
-    if (chartCard) chartCard.style.display = 'block';
-
-    const dashStreamers = lastDashboardData?.streamers || [];
-    const fullA = dashStreamers.find(s => s.login === cardA.login);
-    const fullB = dashStreamers.find(s => s.login === cardB.login);
-
-    const snapsA = (fullA?.recent_snapshots || []);
-    const snapsB = (fullB?.recent_snapshots || []);
-    const maxLen = Math.max(snapsA.length, snapsB.length);
-
-    const labels  = snapsA.map(s => new Date(s.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-    const dataA   = snapsA.map(s => s.viewers);
-    const dataB   = snapsB.slice(-snapsA.length).map(s => s.viewers);
-
-    el('compareChartMeta').textContent = `${snapsA.length} data points — A vs B`;
-
-    const canvas = document.getElementById('compareChart');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-
-    if (compareChartInstance) {
-        compareChartInstance.data.labels           = labels;
-        compareChartInstance.data.datasets[0].data = dataA;
-        compareChartInstance.data.datasets[0].label = cardA.display_name;
-        compareChartInstance.data.datasets[1].data = dataB;
-        compareChartInstance.data.datasets[1].label = cardB.display_name;
-        compareChartInstance.update();
-        return;
-    }
-
-    compareChartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels,
-            datasets: [
-                {
-                    label: cardA.display_name,
-                    data: dataA,
-                    borderColor: '#a855f7',
-                    backgroundColor: 'rgba(168,85,247,0.08)',
-                    borderWidth: 2.5,
-                    tension: 0.4,
-                    pointRadius: 2,
-                    fill: true,
-                },
-                {
-                    label: cardB.display_name,
-                    data: dataB,
-                    borderColor: '#22d3ee',
-                    backgroundColor: 'rgba(34,211,238,0.06)',
-                    borderWidth: 2.5,
-                    tension: 0.4,
-                    pointRadius: 2,
-                    fill: true,
-                },
-            ],
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: { duration: 500 },
-            interaction: { mode: 'index', intersect: false },
-            plugins: {
-                legend: { labels: { color: '#8b95a8' } },
-                tooltip: {
-                    backgroundColor: 'rgba(14,17,24,0.95)',
-                    titleColor: '#f0f4ff',
-                    bodyColor: '#8b95a8',
-                    borderColor: 'rgba(255,255,255,0.1)',
-                    borderWidth: 1,
-                    cornerRadius: 10,
-                    callbacks: { label: ctx => ` ${fmtViewers(ctx.parsed.y)} viewers` },
-                },
-            },
-            scales: {
-                x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4a5568', maxTicksLimit: 8 } },
-                y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#4a5568', callback: v => fmtViewers(v) }, beginAtZero: true },
-            },
-        },
-    });
-}
-
-// ═══════════════════════════════════════════════════════════
-// LEADERBOARD VIEW
-// ═══════════════════════════════════════════════════════════
-function renderLeaderboard() {
-    if (!lastDashboardData) return;
-
-    const streamers = (lastDashboardData.streamers || [])
-        .sort((a, b) => {
-            if (a.is_live !== b.is_live) return a.is_live ? -1 : 1;
-            return b.viewer_count - a.viewer_count;
-        });
-
-    const grid = document.getElementById('leaderboardGrid');
-    if (!grid) return;
-
-    grid.innerHTML = streamers.map((s, i) => {
-        const rank = i + 1;
-        const rankClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : 'rank-other';
-        const rankDisplay = rank <= 3 ? ['🥇','🥈','🥉'][rank - 1] : `#${rank}`;
-        const liveHtml = s.is_live
-            ? `<span class="lb-badge-live">LIVE</span>`
-            : `<span class="lb-badge-offline">OFFLINE</span>`;
-
-        return `
-            <div class="leaderboard-row" onclick="selectStreamer('${s.login}'); switchView('dashboard');">
-                <div class="leaderboard-rank ${rankClass}">${rankDisplay}</div>
-                <div>
-                    <div class="leaderboard-name">${escHtml(s.display_name)}</div>
-                    <div class="leaderboard-game">${s.is_live ? escHtml(s.game_name || 'Unknown') : 'Last seen: ' + formatRelTime(s.last_seen_at)}</div>
-                </div>
-                <div class="leaderboard-viewers">
-                    ${s.is_live ? fmtViewers(s.viewer_count) : '—'}
-                    <span class="viewers-label">${s.is_live ? 'CONCURRENT' : ''}</span>
-                </div>
-                <div class="leaderboard-uptime">${s.is_live ? (s.uptime || '—') : '—'}</div>
-                <div class="leaderboard-status">${liveHtml}</div>
-            </div>
-        `;
-    }).join('');
-
-    renderCategoryChart(lastDashboardData.category_mix || []);
-}
-
-function renderCategoryChart(categories) {
-    const canvas = document.getElementById('categoryChart');
-    if (!canvas || !categories.length) return;
-    const ctx = canvas.getContext('2d');
-
-    const labels = categories.map(c => c.name);
-    const values = categories.map(c => c.value);
-    const colors = [
-        '#a855f7','#22d3ee','#4ade80','#fb923c','#f472b6','#fbbf24','#f87171','#38bdf8'
-    ];
-
-    if (categoryChartInstance) {
-        categoryChartInstance.data.labels           = labels;
-        categoryChartInstance.data.datasets[0].data = values;
-        categoryChartInstance.update();
-        return;
-    }
-
-    categoryChartInstance = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels,
-            datasets: [{
-                data: values,
-                backgroundColor: colors.map(c => c + 'cc'),
-                borderColor: colors,
-                borderWidth: 2,
-                hoverOffset: 8,
-            }],
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: { duration: 700 },
-            plugins: {
-                legend: {
-                    position: 'right',
-                    labels: { color: '#8b95a8', padding: 16, usePointStyle: true },
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(14,17,24,0.95)',
-                    titleColor: '#f0f4ff',
-                    bodyColor: '#8b95a8',
-                    borderColor: 'rgba(255,255,255,0.1)',
-                    borderWidth: 1,
-                    cornerRadius: 10,
-                },
-            },
-        },
-    });
-}
-
-// ═══════════════════════════════════════════════════════════
-// MODAL CONTROLS
-// ═══════════════════════════════════════════════════════════
-function openMethodology() {
-    const modal = document.getElementById('methodologyModal');
-    if (modal) modal.style.display = 'flex';
-}
-
-function closeMethodology() {
-    const modal = document.getElementById('methodologyModal');
-    if (modal) modal.style.display = 'none';
-}
-
-// ═══════════════════════════════════════════════════════════
-// UTILITIES
-// ═══════════════════════════════════════════════════════════
-function el(id) { return document.getElementById(id); }
-
-function escHtml(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
-
-function formatRelTime(isoStr) {
-    if (!isoStr) return 'Unknown';
-    const diff = (Date.now() - new Date(isoStr).getTime()) / 1000;
-    if (diff < 60)        return `${Math.round(diff)}s ago`;
-    if (diff < 3600)      return `${Math.round(diff / 60)}m ago`;
-    if (diff < 86400)     return `${Math.round(diff / 3600)}h ago`;
-    return `${Math.round(diff / 86400)}d ago`;
-}
-
-// ═══════════════════════════════════════════════════════════
-// BOOTSTRAP
-// ═══════════════════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', async () => {
-    await loadConfig();
-    fetchDashboard();
-    setInterval(fetchDashboard, POLL_INTERVAL_MS);
-});
+bootstrap();
