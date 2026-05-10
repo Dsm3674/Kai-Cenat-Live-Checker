@@ -81,6 +81,37 @@ SAMPLE_COMPARE_SUMMARY = {
     "summary": {"tracked": 1, "live": 1, "avg_trend_score": 110, "avg_consistency_score": 72},
 }
 
+SAMPLE_SIGNAL_LAB = {
+    "generated_at": "2026-04-06T12:00:00+00:00",
+    "login": "kaicenat",
+    "display_name": "Kai Cenat",
+    "range_days": 30,
+    "market": {
+        "viewers_watching": 12345,
+        "channels_broadcasting": 1,
+        "unique_games_live": 1,
+        "tracked_channels": 1,
+        "unique_streamers_daily": 1,
+        "hours_watched_window": 4200,
+        "spark": [9000, 11000, 12345],
+        "top_streams": [],
+        "top_live_channels": [],
+    },
+    "performance": {
+        "hours_streamed": 12.5,
+        "average_viewers": 33064,
+        "peak_viewers": 52053,
+        "hours_watched": 1787094,
+        "audience_lift": 10671,
+        "audience_per_hour": 197,
+        "games_streamed": 7,
+        "active_days": 6,
+        "category_mix": [],
+    },
+    "timeline": [],
+    "activity": {"days": [], "max_minutes": 0, "max_peak_viewers": 0},
+}
+
 
 class AppRoutesTest(unittest.TestCase):
     def test_health_route_returns_status_payload(self) -> None:
@@ -162,6 +193,19 @@ class AppRoutesTest(unittest.TestCase):
             self.assertEqual(compare_response.get_json()["leaders"]["momentum"]["login"], "kaicenat")
             self.assertEqual(schema_response.status_code, 200)
             self.assertEqual(schema_response.get_json()["openapi"], "3.0.0")
+
+    def test_signal_lab_route_returns_creator_analytics(self) -> None:
+        with patch.object(TwitchService, "get_signal_lab", return_value=SAMPLE_SIGNAL_LAB):
+            app = create_app()
+            client = app.test_client()
+
+            response = client.get("/api/analytics/signal-lab/kaicenat?days=30")
+            payload = response.get_json()
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(payload["login"], "kaicenat")
+            self.assertEqual(payload["market"]["viewers_watching"], 12345)
+            self.assertEqual(payload["performance"]["peak_viewers"], 52053)
 
     def test_search_and_watchlist_routes(self) -> None:
         with patch.object(

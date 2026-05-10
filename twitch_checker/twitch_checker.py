@@ -9,7 +9,7 @@ import secrets
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -788,6 +788,296 @@ class TwitchService:
             "channel_url": f"https://www.twitch.tv/{normalized}",
         }
 
+    def get_signal_lab(self, login: str | None = None, days: int = 30) -> dict[str, Any]:
+        """TwitchTracker-style analytics assembled from live cards and local history."""
+        normalized = normalize_login(login or "")
+        if not normalized:
+            normalized = self.config.streamers[0] if self.config.streamers else "kaicenat"
+
+        window_days = max(min(parse_int(days, 30), 3650), 1)
+        since = utc_now() - timedelta(days=window_days)
+
+        dashboard: dict[str, Any] | None = None
+        selected_card: dict[str, Any] | None = None
+        if not self.config_error():
+            try:
+                dashboard = self.get_dashboard(force_refresh=False)
+                selected_card = next(
+                    (card for card in dashboard.get("streamers", []) if card.get("login") == normalized),
+                    None,
+                )
+            except (RuntimeError, requests.RequestException, ValueError):
+                dashboard = None
+
+        state = self.state_store.state
+        history_by_login = state.get("history", {})
+        snapshots_by_login = state.get("snapshots", {})
+        live_state_by_login = state.get("streams", {})
+        known_logins = list(
+            dict.fromkeys(
+                [*self.config.streamers, *history_by_login.keys(), *snapshots_by_login.keys(), *live_state_by_login.keys()]
+            )
+        )
+
+        def in_window(item: dict[str, Any], *keys: str) -> bool:
+            for key in keys:
+                stamp = parse_timestamp(item.get(key))
+                if stamp:
+                    return stamp >= since
+            return False
+
+        all_sessions: list[dict[str, Any]] = []
+        selected_sessions: list[dict[str, Any]] = []
+        for session_login, sessions in history_by_login.items():
+            for session in sessions:
+                item = {**session, "login": session_login, "display_name": session_login}
+                all_sessions.append(item)
+                if session_login == normalized:
+                    selected_sessions.append(item)
+
+        selected_sessions_window = [
+            session for session in selected_sessions if in_window(session, "started_at", "ended_at")
+        ]
+        selected_snapshots = [
+            point
+            for point in snapshots_by_login.get(normalized, [])
+            if in_window(point, "timestamp")
+        ]
+        all_snapshots = [
+            {**point, "login": snap_login}
+            for snap_login, points in snapshots_by_login.items()
+            for point in points
+            if in_window(point, "timestamp")
+        ]
+
+        live_cards = dashboard.get("streamers", []) if dashboard else []
+        live_rows = []
+        for card in live_cards:
+            if card.get("is_live"):
+                live_rows.append(
+                    {
+                        "login": card.get("login"),
+                        "display_name": card.get("display_name", card.get("login")),
+                        "value": card.get("viewer_count", 0),
+                        "meta": card.get("game_name") or "Live",
+                        "avatar": card.get("profile_image_url", ""),
+                    }
+                )
+        if not live_rows:
+            for live_login, live_state in live_state_by_login.items():
+                if live_state.get("is_live"):
+                    live_rows.append(
+                        {
+                            "login": live_login,
+                            "display_name": live_state.get("display_name", live_login),
+                            "value": parse_int(live_state.get("last_viewer_count", 0), 0),
+                            "meta": live_state.get("game_name") or "Live",
+                            "avatar": "",
+                        }
+                    )
+        live_rows = sorted(live_rows, key=lambda item: item["value"], reverse=True)
+
+        selected_live = live_state_by_login.get(normalized, {})
+        if selected_card and selected_card.get("is_live"):
+            selected_live = {
+                **selected_live,
+                "is_live": True,
+                "last_viewer_count": selected_card.get("viewer_count", 0),
+                "peak_viewers": selected_card.get("analytics", {}).get("current_peak_viewers", selected_card.get("viewer_count", 0)),
+                "session_started_at": selected_card.get("started_at"),
+                "game_name": selected_card.get("game_name", ""),
+                "title": selected_card.get("title", ""),
+                "display_name": selected_card.get("display_name", normalized),
+            }
+
+        live_minutes = duration_minutes(selected_live.get("session_started_at")) if selected_live.get("is_live") else 0
+        completed_minutes = sum(parse_int(session.get("duration_minutes", 0), 0) for session in selected_sessions_window)
+        total_minutes = completed_minutes + live_minutes
+        selected_peak_values = [parse_int(session.get("peak_viewers", 0), 0) for session in selected_sessions_window]
+        if selected_live.get("is_live"):
+            selected_peak_values.append(parse_int(selected_live.get("peak_viewers", selected_live.get("last_viewer_count", 0)), 0))
+        selected_avg_values = [parse_int(session.get("avg_viewers", 0), 0) for session in selected_sessions_window]
+        if selected_snapshots:
+            selected_avg_values.extend(parse_int(point.get("viewers", 0), 0) for point in selected_snapshots[-8:])
+
+        hours_watched = round(
+            sum(
+                (parse_int(session.get("avg_viewers", 0), 0) * parse_int(session.get("duration_minutes", 0), 0)) / 60
+                for session in selected_sessions_window
+            )
+        )
+        if selected_live.get("is_live"):
+            hours_watched += round(parse_int(selected_live.get("last_viewer_count", 0), 0) * live_minutes / 60)
+
+        active_dates = {
+            parse_timestamp(session.get("started_at")).date().isoformat()
+            for session in selected_sessions_window
+            if parse_timestamp(session.get("started_at"))
+        }
+        if selected_live.get("is_live"):
+            active_dates.add(utc_now().date().isoformat())
+
+        games = {
+            session.get("game_name") or "Uncategorized"
+            for session in selected_sessions_window
+            if session.get("game_name")
+        }
+        if selected_live.get("game_name"):
+            games.add(selected_live["game_name"])
+
+        audience_lift = 0
+        if len(selected_snapshots) >= 2:
+            audience_lift = parse_int(selected_snapshots[-1].get("viewers", 0), 0) - parse_int(selected_snapshots[0].get("viewers", 0), 0)
+
+        top_streams = sorted(
+            [
+                {
+                    "login": session.get("login"),
+                    "display_name": session.get("display_name", session.get("login")),
+                    "title": compact_text(session.get("title", ""), 72) or "Untitled stream",
+                    "peak_viewers": parse_int(session.get("peak_viewers", 0), 0),
+                    "avg_viewers": parse_int(session.get("avg_viewers", 0), 0),
+                    "game_name": session.get("game_name") or "Uncategorized",
+                    "started_at": session.get("started_at"),
+                }
+                for session in all_sessions
+            ],
+            key=lambda item: item["peak_viewers"],
+            reverse=True,
+        )[:10]
+
+        global_spark = [
+            parse_int(point.get("viewers", 0), 0)
+            for point in sorted(all_snapshots, key=lambda item: item.get("timestamp") or "")[-10:]
+        ]
+        if len(global_spark) < 2:
+            global_spark = [row["value"] for row in live_rows[:10]] or [0, 0]
+
+        category_counts: dict[str, int] = {}
+        for session in selected_sessions:
+            category = session.get("game_name") or "Uncategorized"
+            category_counts[category] = category_counts.get(category, 0) + 1
+        if selected_live.get("game_name"):
+            category_counts[selected_live["game_name"]] = category_counts.get(selected_live["game_name"], 0) + 1
+
+        timeline = self._build_signal_timeline(normalized, selected_sessions, snapshots_by_login.get(normalized, []))
+        activity = self._build_activity_heatmap(normalized, selected_sessions, selected_live)
+
+        return {
+            "generated_at": utc_now_iso(),
+            "login": normalized,
+            "display_name": (selected_card or {}).get("display_name") or selected_live.get("display_name") or normalized,
+            "range_days": window_days,
+            "market": {
+                "viewers_watching": sum(row["value"] for row in live_rows),
+                "channels_broadcasting": len(live_rows),
+                "unique_games_live": len({row["meta"] for row in live_rows if row.get("meta")}),
+                "tracked_channels": len(known_logins),
+                "unique_streamers_daily": len(
+                    {
+                        session.get("login")
+                        for session in all_sessions
+                        if in_window(session, "started_at", "ended_at")
+                    }
+                ),
+                "hours_watched_window": hours_watched,
+                "spark": global_spark,
+                "top_streams": top_streams,
+                "top_live_channels": live_rows[:10],
+            },
+            "performance": {
+                "hours_streamed": round(total_minutes / 60, 1),
+                "average_viewers": safe_average(selected_avg_values),
+                "peak_viewers": max(selected_peak_values, default=0),
+                "hours_watched": hours_watched,
+                "audience_lift": audience_lift,
+                "audience_per_hour": round(audience_lift / max(total_minutes / 60, 1)),
+                "games_streamed": len(games),
+                "active_days": len(active_dates),
+                "total_hours_streamed": round(sum(parse_int(session.get("duration_minutes", 0), 0) for session in selected_sessions) / 60, 1),
+                "total_games_streamed": len(category_counts),
+                "best_stream_date": max(selected_sessions, key=lambda item: parse_int(item.get("peak_viewers", 0), 0), default={}).get("started_at"),
+                "category_mix": [
+                    {"name": name, "value": value}
+                    for name, value in sorted(category_counts.items(), key=lambda item: item[1], reverse=True)[:8]
+                ],
+            },
+            "timeline": timeline,
+            "activity": activity,
+        }
+
+    def _build_signal_timeline(
+        self,
+        login: str,
+        sessions: list[dict[str, Any]],
+        snapshots: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        points: list[dict[str, Any]] = []
+        cumulative_hours = 0.0
+        for session in sorted(sessions, key=lambda item: item.get("started_at") or ""):
+            cumulative_hours += parse_int(session.get("duration_minutes", 0), 0) / 60
+            points.append(
+                {
+                    "timestamp": session.get("ended_at") or session.get("started_at"),
+                    "avg_viewers": parse_int(session.get("avg_viewers", 0), 0),
+                    "peak_viewers": parse_int(session.get("peak_viewers", 0), 0),
+                    "viewers": parse_int(session.get("peak_viewers", 0), 0),
+                    "hours_streamed": round(cumulative_hours, 1),
+                    "source": "session",
+                }
+            )
+        for point in snapshots:
+            points.append(
+                {
+                    "timestamp": point.get("timestamp"),
+                    "avg_viewers": parse_int(point.get("viewers", 0), 0),
+                    "peak_viewers": parse_int(point.get("viewers", 0), 0),
+                    "viewers": parse_int(point.get("viewers", 0), 0),
+                    "hours_streamed": cumulative_hours,
+                    "source": "snapshot",
+                }
+            )
+        return [
+            point
+            for point in sorted(points, key=lambda item: item.get("timestamp") or "")[-120:]
+            if point.get("timestamp")
+        ]
+
+    def _build_activity_heatmap(
+        self,
+        login: str,
+        sessions: list[dict[str, Any]],
+        live_state: dict[str, Any],
+    ) -> dict[str, Any]:
+        by_date: dict[str, dict[str, Any]] = {}
+        for session in sessions:
+            started = parse_timestamp(session.get("started_at"))
+            if not started:
+                continue
+            key = started.date().isoformat()
+            bucket = by_date.setdefault(key, {"date": key, "minutes": 0, "peak_viewers": 0, "sessions": 0})
+            bucket["minutes"] += parse_int(session.get("duration_minutes", 0), 0)
+            bucket["peak_viewers"] = max(bucket["peak_viewers"], parse_int(session.get("peak_viewers", 0), 0))
+            bucket["sessions"] += 1
+
+        if live_state.get("is_live"):
+            key = utc_now().date().isoformat()
+            bucket = by_date.setdefault(key, {"date": key, "minutes": 0, "peak_viewers": 0, "sessions": 0})
+            bucket["minutes"] += duration_minutes(live_state.get("session_started_at"))
+            bucket["peak_viewers"] = max(
+                bucket["peak_viewers"],
+                parse_int(live_state.get("peak_viewers", live_state.get("last_viewer_count", 0)), 0),
+            )
+            bucket["sessions"] += 1
+
+        values = sorted(by_date.values(), key=lambda item: item["date"])
+        return {
+            "login": login,
+            "max_minutes": max((item["minutes"] for item in values), default=0),
+            "max_peak_viewers": max((item["peak_viewers"] for item in values), default=0),
+            "days": values[-730:],
+        }
+
     def get_compare_summary(self, logins: list[str]) -> dict[str, Any]:
         compared = self.compare_streamers(logins)
         streamers = compared.get("streamers", [])
@@ -836,6 +1126,7 @@ class TwitchService:
                 "/api/compare/summary": {"get": {"summary": "Comparison summary and leaders for selected streamers"}},
                 "/api/streams": {"get": {"summary": "Lightweight stream cards with Twitch embed URLs"}},
                 "/api/streams/embed/{login}": {"get": {"summary": "Twitch player/chat embed descriptor"}},
+                "/api/analytics/signal-lab/{login}": {"get": {"summary": "TwitchTracker-style market and creator analytics"}},
                 "/api/openapi.json": {"get": {"summary": "Machine-readable API schema"}},
             },
             "components": {
@@ -1793,6 +2084,14 @@ def create_app() -> Flask:
         if not normalized:
             return jsonify({"error": "invalid_login", "detail": "Invalid Twitch login."}), 400
         return json_service_response(lambda: service.get_analytics_stream(normalized))
+
+    @app.get("/api/analytics/signal-lab/<login>")
+    def analytics_signal_lab(login: str) -> Any:
+        normalized = normalize_login(login)
+        if not normalized:
+            return jsonify({"error": "invalid_login", "detail": "Invalid Twitch login."}), 400
+        days = parse_int(request.args.get("days", 30), 30)
+        return jsonify(service.get_signal_lab(normalized, days=days))
 
     def _embed_parent() -> str:
         host = (request.host or "").split(":", 1)[0].strip().lower()
