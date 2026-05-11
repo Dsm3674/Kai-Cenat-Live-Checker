@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="kc-live-dashboard" content="signal-lab-ops-desk" />
 <title>KC Live · Audience Operations</title>
 <meta name="description" content="Operations-grade Twitch monitoring workspace — live telemetry, forecast horizons, watchlist, event wire, and embedded player." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1722,6 +1721,461 @@ a {
     display:none
   }
 
+}
+
+/* ============================================================
+   Signal Lab — analytics tab (Robinhood-style; restrained,
+   hairline borders, mono numerics, single accent)
+   ============================================================ */
+
+.p-signal {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* View switching: only Signal Lab when active */
+.app[data-view=signal] .workspace {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+.app[data-view=signal] .workspace .pane:not(.p-signal) { display: none; }
+.app[data-view=signal] .p-signal { display: flex; }
+
+.signal-shell {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 22px 28px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background:
+    radial-gradient(70% 40% at 50% 0%, rgba(145,70,255,.06), transparent 60%),
+    transparent;
+}
+
+/* Hero band */
+.signal-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+.signal-hero > div:first-child { min-width: 0; flex: 1; }
+.signal-title-kicker {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brand-2);
+  margin-bottom: 8px;
+}
+.signal-title {
+  font-family: var(--sans);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0;
+}
+.signal-subtitle {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--mute);
+  max-width: 640px;
+}
+
+/* Range selector — matches chart-foot pill style */
+.signal-ranges {
+  display: inline-flex;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 2px;
+  flex: none;
+}
+.signal-ranges button {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: var(--mute);
+  transition: color 0.15s, background 0.15s;
+}
+.signal-ranges button:hover:not(.is-active) {
+  color: var(--ink-2);
+  background: var(--hover);
+}
+.signal-ranges button.is-active {
+  background: var(--brand-soft);
+  color: var(--brand-2);
+}
+
+/* 12-col grid for cards */
+.signal-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 14px;
+}
+#signalMarketMetrics {
+  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+}
+
+/* Cards */
+.signal-card {
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+}
+.signal-card.pad { padding: 16px 18px; }
+.signal-card h3 {
+  margin: 0 0 14px;
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* Span helpers for the 12-col grid */
+.signal-full  { grid-column: span 12; }
+.signal-wide  { grid-column: span 8; }
+.signal-side  { grid-column: span 4; }
+.signal-half  { grid-column: span 6; }
+.signal-third { grid-column: span 4; }
+.signal-table-card { grid-column: span 6; }
+
+/* Metric tile (big number + label + sparkline bars) */
+.signal-metric {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+}
+.signal-metric > div:first-child { min-width: 0; flex: 1; }
+.signal-metric .value {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink);
+  font-feature-settings: "tnum", "zero";
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.signal-metric .label {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+/* Mini sparkline bars (--bar-color set inline by JS) */
+.signal-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 32px;
+  width: 80px;
+  flex: none;
+}
+.signal-bars i {
+  flex: 1;
+  background: var(--bar-color, var(--brand-2));
+  opacity: 0.85;
+  border-radius: 1px;
+  min-height: 4px;
+}
+
+/* Tables inside Signal Lab */
+.signal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.signal-table thead th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mute);
+  padding: 4px 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+.signal-table thead th:last-child,
+.signal-table tbody td:last-child { text-align: right; }
+.signal-table tbody tr { border-bottom: 1px solid var(--hairline); }
+.signal-table tbody tr:last-child { border-bottom: 0; }
+.signal-table tbody tr:hover { background: var(--hover); }
+.signal-table tbody td {
+  padding: 10px 8px;
+  vertical-align: middle;
+  color: var(--ink-2);
+}
+.signal-table tbody td b {
+  color: var(--ink);
+  font-family: var(--mono);
+  font-weight: 600;
+  font-feature-settings: "tnum";
+}
+.signal-table tbody td small {
+  font-size: 10.5px;
+  color: var(--mute);
+  font-family: var(--mono);
+}
+
+/* Channel name + avatar in tables */
+.signal-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.signal-name > span:last-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.signal-name b {
+  color: var(--ink);
+  font-weight: 600;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+.signal-name small {
+  color: var(--mute);
+  font-size: 11px;
+  font-family: var(--sans);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+.signal-avatar {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--brand-soft) center/cover no-repeat;
+  border: 1px solid var(--hairline);
+}
+
+/* Creator performance tiles */
+.signal-perf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+.perf-tile {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.perf-tile strong {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink);
+  font-feature-settings: "tnum";
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.perf-tile span {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.perf-tile.up    strong { color: var(--up); }
+.perf-tile.down  strong { color: var(--down); }
+.perf-tile.flat  strong { color: var(--ink); }
+.perf-tile.brand strong { color: var(--brand-2); }
+
+/* Timeline chart */
+.signal-chart {
+  height: 280px;
+  position: relative;
+  background:
+    linear-gradient(to bottom, transparent 0%, rgba(145,70,255,0.025) 100%);
+  border-radius: 6px;
+  border: 1px solid var(--hairline);
+  padding: 6px;
+  overflow: hidden;
+}
+.signal-chart svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.signal-chart-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mute);
+  font-size: 12.5px;
+}
+
+/* Category mix list */
+.category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.category-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  row-gap: 4px;
+  align-items: center;
+}
+.category-row > span {
+  font-size: 12px;
+  color: var(--ink-2);
+  font-family: var(--sans);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.category-row > b {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+  font-feature-settings: "tnum";
+}
+.category-row .category-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  background: rgba(192,165,255,0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.category-row .category-bar > i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--brand-deep), var(--brand-2));
+  border-radius: 2px;
+}
+
+/* Activity heatmap (GitHub-style, year of streaming) */
+.signal-heatmap {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 12px);
+  grid-auto-columns: 12px;
+  gap: 3px;
+  padding: 8px 0 4px;
+  overflow-x: auto;
+}
+.signal-day {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: rgba(192,165,255,0.06);
+  transition: transform 0.12s;
+}
+.signal-day:hover { transform: scale(1.4); }
+.signal-day[data-level="0"] { background: rgba(192,165,255,0.06); }
+.signal-day[data-level="1"] { background: rgba(145,70,255,0.28); }
+.signal-day[data-level="2"] { background: rgba(145,70,255,0.55); }
+.signal-day[data-level="3"] { background: rgba(179,136,255,0.78); }
+.signal-day[data-level="4"] { background: var(--brand-2); }
+
+.signal-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--mute);
+}
+.signal-legend .scale {
+  display: inline-flex;
+  width: 88px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg,
+    rgba(192,165,255,0.06),
+    rgba(145,70,255,0.28),
+    rgba(145,70,255,0.55),
+    rgba(179,136,255,0.78),
+    var(--brand-2)
+  );
+}
+.signal-legend .muted {
+  color: var(--mute-2);
+  font-size: 10px;
+}
+
+/* Empty state inside Signal Lab */
+.signal-empty {
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--mute);
+  font-size: 12.5px;
+}
+
+/* Responsive Signal Lab */
+@media(max-width: 1180px) {
+  .signal-wide  { grid-column: span 12; }
+  .signal-side  { grid-column: span 12; }
+}
+@media(max-width: 900px) {
+  .signal-half, .signal-third, .signal-table-card { grid-column: span 12; }
+  .signal-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+}
+@media(max-width: 720px) {
+  .signal-shell { padding: 18px 14px 28px; }
+  .signal-title { font-size: 21px; }
+  #signalMarketMetrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .signal-metric .value { font-size: 18px; }
+  .signal-bars { width: 56px; height: 26px; }
 }
 </style>
 </head>
