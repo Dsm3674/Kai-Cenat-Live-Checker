@@ -196,6 +196,45 @@
     @media (max-width:1080px) { .features { grid-template-columns: repeat(6,1fr); } .feature { grid-column: span 3; } .feature.wide-2, .feature.wide-3 { grid-column: span 6; } .ps-body { grid-template-columns: 220px 1fr; } .ps-right { display: none; } }
     @media (max-width:880px) { .nav-links { display: none; } .hero { grid-template-columns: 1fr; padding-top: 2rem; } .hero-mockup { margin-top: 2rem; max-width: 480px; } .float-badge.fb-forecast { left: 0; } .float-badge.fb-anomaly { right: 0; } .section-head { grid-template-columns: 1fr; gap: 1.2rem; align-items: start; } .features { grid-template-columns: 1fr; } .feature, .feature.wide-2, .feature.wide-3 { grid-column: span 1; } .workflow { grid-template-columns: 1fr; } .step { border-right: none; } .split, .split.reverse { grid-template-columns: 1fr; } .split.reverse .split-text { order: 1; } .split.reverse .split-visual { order: 2; } .stats-band { grid-template-columns: repeat(2,1fr); } .ps-body { grid-template-columns: 1fr; } .ps-side { display: none; } footer { grid-template-columns: 1fr 1fr; } }
     @media (max-width:540px) { footer { grid-template-columns: 1fr; } .foot-base { flex-direction: column; align-items: flex-start; } .stats-band { grid-template-columns: 1fr; } .nav-cta .link { display: none; } }
+    /* === Extra mobile polish (does not touch desktop) === */
+    @media (max-width:720px) {
+      html, body { overflow-x: hidden; }
+      input, select, textarea, button { font-size: 16px; } /* defeats iOS focus-zoom */
+      .nav { padding-top: max(0.9rem, env(safe-area-inset-top)); padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right)); }
+      .btn { padding: 0.78rem 1.1rem; font-size: .92rem; min-height: 44px; }
+      .btn-large { padding: 0.85rem 1.3rem; font-size: 0.98rem; }
+      .hero-copy h1, .hero-copy .hero-title { font-size: clamp(2rem, 9vw, 2.6rem) !important; line-height: 1.08; }
+      .hero-copy p { font-size: 1rem; }
+      .hero-ctas { flex-wrap: wrap; gap: .6rem; }
+      .hero-ctas .btn { width: 100%; justify-content: center; }
+      .hero-ctas .arrow-link { width: 100%; text-align: center; padding-top: .3rem; }
+      .hero-mockup { max-width: 100% !important; }
+      .float-badge { font-size: .72rem !important; padding: .4rem .55rem !important; }
+      .section-title { font-size: clamp(1.6rem, 7vw, 2.2rem); }
+      .section-lede { font-size: .98rem; }
+      .feature { padding: 1.1rem !important; }
+      .preview-shot { border-radius: 14px; overflow: hidden; }
+      .ps-body { padding: 10px !important; gap: 10px !important; }
+      .ps-main-head { flex-wrap: wrap; gap: .6rem; }
+      .ps-grid { grid-template-columns: repeat(2, 1fr) !important; gap: .5rem; }
+      .ps-tile .v { font-size: 1.05rem; }
+      .anom-row { grid-template-columns: auto 1fr auto !important; gap: .55rem; font-size: .82rem; }
+      .sv-meta { flex-wrap: wrap; gap: .5rem; }
+      footer { padding: 1.6rem 1.25rem !important; gap: 1.5rem !important; }
+      .foot-brand p { font-size: .88rem; }
+      .foot-base { font-size: .74rem; }
+      .foot-base .legal { flex-wrap: wrap; gap: .9rem 1.2rem; }
+      a, button { -webkit-tap-highlight-color: rgba(145, 70, 255, .12); }
+    }
+    @media (max-width:420px) {
+      .nav { padding: .85rem .95rem; }
+      .logo-name { display: none; }
+      .nav-cta { gap: .6rem; }
+      .hero { padding: 1.2rem 1rem 2rem !important; }
+      .stats-band .stat .n, .stats-band .stat strong { font-size: 1.4rem !important; }
+      .ps-tile { padding: .55rem !important; }
+      .preview-shot .mockup-url { font-size: .68rem !important; }
+    }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
     .page-exit { position: fixed; inset: 0; z-index: 9999; background: radial-gradient(60% 50% at 50% 50%, rgba(145, 70, 255, 0.55), rgba(10, 6, 18, 0.98)); display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity .42s ease; }
     .page-exit.is-active { opacity: 1; pointer-events: auto; }

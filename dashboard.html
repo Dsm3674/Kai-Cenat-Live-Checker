@@ -2305,6 +2305,53 @@ a {
   #signalMarketMetrics { grid-template-columns: 1fr !important; }
   .account-summary .total { font-size: 22px; }
 }
+
+/* ============================================================
+   Mobile polish pass 2 — no desktop impact (all in <=720px)
+   ============================================================ */
+@media (max-width: 720px) {
+  html, body { overflow-x: hidden; -webkit-text-size-adjust: 100%; }
+  body { padding-bottom: env(safe-area-inset-bottom); }
+  .topbar { padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); }
+  a, button, .tab, .btn-pill, .iconbtn { -webkit-tap-highlight-color: rgba(145, 70, 255, .14); }
+
+  /* Larger touch targets for tiny icon buttons */
+  .iconbtn { min-width: 32px; min-height: 32px; }
+
+  /* Modal / dropdown overlays - cap height and allow scroll */
+  .search-results { max-height: 60vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .search-results .sr-row { padding: 10px 12px; }
+  .search-results .sr-avatar { width: 32px; height: 32px; }
+
+  /* Movers table columns - condense rather than overflow off-screen */
+  .movers-table .col-head, .movers-table .row { grid-template-columns: 18px 56px 1fr 56px !important; }
+  .movers-table .col-head span:nth-child(5), .movers-table .row span:nth-child(5) { display: none; }
+
+  /* Forecast confidence pill wraps */
+  .fc-head { flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
+  .symtag { flex-wrap: wrap; gap: 6px; }
+
+  /* Event list rows readable */
+  #eventsTbody td, #positionsTbody td { padding: 7px 8px; font-size: 12.5px; }
+
+  /* App entry loader scales down */
+  .app-enter .ring { width: 56px; height: 56px; }
+
+  /* Sticky pane-head behaves on phones (do not stick, free scroll feels better) */
+  .pane-head { position: static !important; }
+
+  /* Prevent absurd horizontal scroll inside Signal Lab heatmap */
+  .signal-heatmap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
+
+@media (max-width: 420px) {
+  /* Hide the status dot on tiniest phones to give tabs more room */
+  .topbar-status { display: none; }
+  /* Compact ranges row */
+  .ranges button { padding: 4px 8px; font-size: 11px; }
+  /* Account spark too tall on small screens */
+  .account-spark { height: 48px !important; }
+}
 </style>
 </head>
 <body>
