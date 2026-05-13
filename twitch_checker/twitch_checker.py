@@ -1945,6 +1945,30 @@ def create_app() -> Flask:
     def dashboard_page() -> Any:
         return send_from_directory(BASE_DIR, "dashboard.html")
 
+    @app.get("/privacy.html")
+    def privacy_page() -> Any:
+        return send_from_directory(BASE_DIR, "privacy.html")
+
+    @app.get("/terms.html")
+    def terms_page() -> Any:
+        return send_from_directory(BASE_DIR, "terms.html")
+
+    @app.get("/cookies.html")
+    def cookies_page() -> Any:
+        return send_from_directory(BASE_DIR, "cookies.html")
+
+    @app.get("/disclaimer.html")
+    def disclaimer_page() -> Any:
+        return send_from_directory(BASE_DIR, "disclaimer.html")
+
+    @app.get("/legal.css")
+    def legal_css() -> Any:
+        return send_from_directory(BASE_DIR, "legal.css")
+
+    @app.get("/landing.html")
+    def landing_alias() -> Any:
+        return send_from_directory(BASE_DIR, "landing.html")
+
     @app.get("/api/health")
     def health() -> Any:
         error = service.config_error()

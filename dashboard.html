@@ -2177,6 +2177,134 @@ a {
   .signal-metric .value { font-size: 18px; }
   .signal-bars { width: 56px; height: 26px; }
 }
+
+/* ============================================================
+   Mobile UX polish — improves the dashboard at phone widths
+   ============================================================ */
+
+/* iOS auto-zooms inputs with font-size < 16px on focus. Bump them. */
+@media (max-width: 720px) {
+  input, select, textarea { font-size: 16px !important; }
+}
+
+/* Tighten and reflow the topbar */
+@media (max-width: 720px) {
+  .topbar {
+    padding: 0 8px;
+    gap: 6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .topbar::-webkit-scrollbar { display: none; }
+
+  .brand { padding-right: 8px; margin-right: 2px; gap: 6px; flex: none; }
+  .brand-meta span { display: none; }            /* hide "OPS DESK" sublabel */
+  .brand-mark { width: 26px; height: 26px; }
+
+  .topbar-status {
+    margin-right: 4px;
+    padding: 4px 6px;
+    font-size: 0;                                  /* hide text, keep dot */
+    flex: none;
+  }
+  .topbar-status .dot { margin: 0; }
+
+  .tabs {
+    flex: 1 1 auto;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 0;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    padding: 8px 10px;
+    min-height: 40px;                              /* better tap target */
+    flex: none;
+  }
+
+  .topbar-right { gap: 4px; flex: none; }
+  .btn-pill { padding: 6px 8px; font-size: 0; }   /* icon-only Refresh */
+  .btn-pill svg { width: 14px; height: 14px; }
+  .profile-pill {
+    padding: 3px;
+    font-size: 0;                                  /* avatar-only */
+  }
+  .profile-pill .avatar { width: 26px; height: 26px; }
+  .profile-pill .chev { display: none; }
+}
+
+/* Stack workspace on phones with full-width panes */
+@media (max-width: 720px) {
+  .workspace {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 8px;
+  }
+  .pane {
+    border-radius: 10px;
+    border: 1px solid var(--hairline);
+    overflow: hidden;
+  }
+  .pane-head { height: 36px; padding: 0 12px; }
+  .pane-head .label { font-size: 12px; }
+
+  /* Allow vertical scrolling for tables/charts so they don't stretch off-screen */
+  .list-table-wrap, .fc-table-wrap, .chart-body {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .list-table, .fc-table { min-width: 480px; font-size: 13px; }
+  .chart-body { min-height: 220px; }
+
+  /* Movers, account summary, etc. - readable typography */
+  .account-summary .total { font-size: 26px; }
+  .account-row { font-size: 13px; padding: 6px 0; }
+  .movers-table .col-head, .movers-table .row { font-size: 12px; }
+
+  /* Chart toolbar - allow wrapping */
+  .chart-head, .chart-bid-ask {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+  .chart-symbol { flex-wrap: wrap; gap: 6px; }
+  .chart-foot { flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
+  .ranges { flex-wrap: wrap; }
+  .ranges button { min-height: 32px; padding: 4px 10px; }
+
+  /* Stream search bar - full width */
+  .streams-head { flex-wrap: wrap; gap: 10px; padding: 12px; }
+  .streams-search { width: 100%; }
+  .streams-search input { width: 100%; min-height: 40px; }
+  .stream-filter { width: 100%; }
+  .stream-filter button { flex: 1; min-height: 36px; }
+
+  /* Stream grid - one card per row */
+  .stream-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  /* Forecast table - tighter padding */
+  .fc-table th, .fc-table td { padding: 6px 8px; }
+
+  /* Signal Lab grid stacks */
+  .signal-grid { grid-template-columns: 1fr !important; gap: 12px; }
+  .signal-card.pad { padding: 14px; }
+}
+
+/* Extra-tight phone width */
+@media (max-width: 420px) {
+  .brand-meta b { font-size: 11px; }
+  .tab { padding: 8px; }
+  .tab svg { width: 14px; height: 14px; }
+  #signalMarketMetrics { grid-template-columns: 1fr !important; }
+  .account-summary .total { font-size: 22px; }
+}
 </style>
 </head>
 <body>
