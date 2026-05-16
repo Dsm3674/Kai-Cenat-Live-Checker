@@ -2759,7 +2759,7 @@ function renderAccount() {
   ovCache.classList.toggle('warn', cacheAge!=null&&cacheAge>(health.cache_ttl_seconds||60));
   ovCache.classList.toggle('bad', !health.configured);
   const ml=command.system_checks?.find(c=>/forecast/i.test(c.name));
-  document.getElementById('ovModel').textContent=ml?(ml.detail.includes('available')?'poly · σ 2.5':'fallback'):(state.workspace?.config?'poly · σ 2.5':'—');
+  document.getElementById('ovModel').textContent=ml?(ml.detail.includes('available')?'ensemble · poly+holt+ridge':'fallback'):(state.workspace?.config?'ensemble · poly+holt+ridge':'—');
   document.getElementById('ovCategory').textContent=overview.dominant_category||'—';
   const checksHost=document.getElementById('systemChecks'), checks=command.system_checks||[];
   if(checksHost) {
