@@ -3039,7 +3039,19 @@ function renderSignalTimeline(points) {
   let bars='', lineV='', lineH='', grid='';
   for(let i=0;i<=3;i++){const y=padT+(h-padT-padB)*i/3;grid+='<line x1="'+padL+'" x2="'+(w-padR)+'" y1="'+y+'" y2="'+y+'" stroke="rgba(192,165,255,.07)"/><text x="8" y="'+(y+4)+'" fill="var(--mute)" font-family="Geist Mono" font-size="10">'+fmt(maxV*(1-i/3))+'</text>'}
   values.forEach((v,i)=>{const x=padL+i*step;const y=yV(v);bars+='<rect x="'+(x-2)+'" y="'+y+'" width="4" height="'+(h-padB-y)+'" fill="rgba(0,245,179,.26)"/>';lineV+=(i?'L':'M')+x.toFixed(1)+','+y.toFixed(1)+' ';lineH+=(i?'L':'M')+x.toFixed(1)+','+yH(hours[i]).toFixed(1)+' '});
-  host.innerHTML='<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'+grid+bars+'<path d="'+lineH+'" fill="none" stroke="var(--warn)" stroke-width="2.2" vector-effect="non-scaling-stroke" opacity=".85"/><path d="'+lineV+'" fill="none" stroke="var(--brand-2)" stroke-width="2.6" vector-effect="non-scaling-stroke"/><text x="'+padL+'" y="18" fill="var(--mute)" font-family="Geist Mono" font-size="11">viewers + cumulative hours</text></svg>'
+  const maxHoursLabel=maxH>0?fmt(maxH)+'h cum.':'—';
+  const legendY=h-6;
+  host.innerHTML='<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'+grid+bars
+    +'<path d="'+lineH+'" fill="none" stroke="var(--warn)" stroke-width="2.2" vector-effect="non-scaling-stroke" opacity=".85"/>'
+    +'<path d="'+lineV+'" fill="none" stroke="var(--brand-2)" stroke-width="2.6" vector-effect="non-scaling-stroke"/>'
+    +'<text x="'+padL+'" y="18" fill="var(--mute)" font-family="Geist Mono" font-size="11">Viewers (purple) · Cumulative hours streamed (yellow)</text>'
+    +'<g font-family="Geist Mono" font-size="10" fill="var(--mute)">'
+      +'<circle cx="'+padL+'" cy="'+legendY+'" r="3" fill="var(--brand-2)"/>'
+      +'<text x="'+(padL+8)+'" y="'+(legendY+3)+'">viewers</text>'
+      +'<circle cx="'+(padL+82)+'" cy="'+legendY+'" r="3" fill="var(--warn)"/>'
+      +'<text x="'+(padL+90)+'" y="'+(legendY+3)+'">hours · '+escHtml(maxHoursLabel)+'</text>'
+    +'</g>'
+    +'</svg>'
 }
 function renderSignalHeatmap(activity) {
   const host=document.getElementById('signalHeatmap');

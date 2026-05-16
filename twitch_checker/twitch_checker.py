@@ -960,7 +960,12 @@ class TwitchService:
         if selected_live.get("game_name"):
             category_counts[selected_live["game_name"]] = category_counts.get(selected_live["game_name"], 0) + 1
 
-        timeline = self._build_signal_timeline(normalized, selected_sessions, snapshots_by_login.get(normalized, []))
+        timeline = self._build_signal_timeline(
+            normalized,
+            selected_sessions,
+            snapshots_by_login.get(normalized, []),
+            selected_live,
+        )
         activity = self._build_activity_heatmap(normalized, selected_sessions, selected_live)
 
         return {
@@ -1011,9 +1016,19 @@ class TwitchService:
         login: str,
         sessions: list[dict[str, Any]],
         snapshots: list[dict[str, Any]],
+        live_state: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
+        """Timeline merge of session history + raw snapshots.
+
+        ``hours_streamed`` is cumulative across completed sessions. For
+        snapshots inside an active (live) session, we add the time elapsed
+        since ``session_started_at`` on top of the historical cumulative — so
+        the yellow "cumulative hours" line keeps climbing live instead of
+        flat-lining until the stream ends.
+        """
         points: list[dict[str, Any]] = []
         cumulative_hours = 0.0
+
         for session in sorted(sessions, key=lambda item: item.get("started_at") or ""):
             cumulative_hours += parse_int(session.get("duration_minutes", 0), 0) / 60
             points.append(
@@ -1022,18 +1037,29 @@ class TwitchService:
                     "avg_viewers": parse_int(session.get("avg_viewers", 0), 0),
                     "peak_viewers": parse_int(session.get("peak_viewers", 0), 0),
                     "viewers": parse_int(session.get("peak_viewers", 0), 0),
-                    "hours_streamed": round(cumulative_hours, 1),
+                    "hours_streamed": round(cumulative_hours, 2),
                     "source": "session",
                 }
             )
+
+        live_start = parse_timestamp((live_state or {}).get("session_started_at")) if live_state and live_state.get("is_live") else None
+
         for point in snapshots:
+            snapshot_hours = cumulative_hours
+            if live_start is not None:
+                ts = parse_timestamp(point.get("timestamp"))
+                if ts and ts >= live_start:
+                    snapshot_hours = cumulative_hours + max(
+                        (ts - live_start).total_seconds() / 3600.0,
+                        0.0,
+                    )
             points.append(
                 {
                     "timestamp": point.get("timestamp"),
                     "avg_viewers": parse_int(point.get("viewers", 0), 0),
                     "peak_viewers": parse_int(point.get("viewers", 0), 0),
                     "viewers": parse_int(point.get("viewers", 0), 0),
-                    "hours_streamed": cumulative_hours,
+                    "hours_streamed": round(snapshot_hours, 2),
                     "source": "snapshot",
                 }
             )
