@@ -2057,6 +2057,41 @@ def create_app() -> Flask:
         prediction = predict_peak_viewers(data_points)
         return jsonify({"login": normalized, "data_points_used": len(data_points), **prediction})
 
+    @app.get("/api/ml/model-card/<login>")
+    def model_card(login: str) -> Any:
+        """Detailed model evaluation card: per-submodel metrics + ensemble choice.
+
+        Lighter than /api/ml/predict — strips the forecast points and just
+        returns evaluation metadata for a model-card UI.
+        """
+        normalized = normalize_login(login)
+        if not normalized:
+            return jsonify({"error": "invalid_login", "detail": "Invalid Twitch login."}), 400
+        if not ML_AVAILABLE:
+            return jsonify({"status": "ml_not_enabled", "login": normalized}), 501
+
+        data_points = service.prediction_data_for_login(normalized, 60)
+        if not data_points:
+            return jsonify({"status": "no_data_in_db", "login": normalized})
+
+        prediction = predict_peak_viewers(data_points)
+        if prediction.get("status") != "success":
+            return jsonify({"login": normalized, **prediction})
+
+        card = {
+            "login": normalized,
+            "samples_used": prediction.get("samples_used"),
+            "ensemble_members": prediction.get("ensemble_members", []),
+            "model_card": prediction.get("model_card", {}),
+            "ensemble_evaluation": prediction.get("ensemble_evaluation", {}),
+            "baseline_mae": prediction.get("baseline_mae"),
+            "beats_naive_baseline": prediction.get("beats_naive_baseline"),
+            "confidence_label": prediction.get("confidence_label"),
+            "anomalies_detected_count": len(prediction.get("anomalies", []) or []),
+            "model_std_error": prediction.get("model_std_error"),
+        }
+        return jsonify(card)
+
     @app.get("/api/search")
     def search() -> Any:
         query = request.args.get("q", "").strip()

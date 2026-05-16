@@ -2352,6 +2352,219 @@ a {
   /* Account spark too tall on small screens */
   .account-spark { height: 48px !important; }
 }
+
+/* ============================================================
+   Toast notification system — additive overlay (no layout impact)
+   ============================================================ */
+.toast-stack {
+  position: fixed;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  right: 16px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  pointer-events: none;
+  max-width: min(380px, calc(100vw - 32px));
+}
+.toast {
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(20, 14, 36, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+  color: #ecebf4;
+  font-size: 13px;
+  line-height: 1.45;
+  transform: translateX(120%);
+  opacity: 0;
+  transition: transform .35s cubic-bezier(.2,.8,.2,1.1), opacity .25s ease;
+}
+.toast.is-visible { transform: translateX(0); opacity: 1; }
+.toast .toast-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(145,70,255,.22), rgba(145,70,255,.05));
+  color: #b388ff;
+  font-size: 14px;
+}
+.toast--live .toast-icon { background: linear-gradient(135deg, rgba(235,4,0,.22), rgba(235,4,0,.05)); color: #ff6a64; }
+.toast--anomaly .toast-icon { background: linear-gradient(135deg, rgba(245,158,11,.22), rgba(245,158,11,.05)); color: #fbbf24; }
+.toast--success .toast-icon { background: linear-gradient(135deg, rgba(0,245,179,.22), rgba(0,245,179,.05)); color: #4ade80; }
+.toast--error .toast-icon { background: linear-gradient(135deg, rgba(255,77,109,.22), rgba(255,77,109,.05)); color: #ff8c9a; }
+.toast .toast-body b { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 2px; color: #fff; }
+.toast .toast-body span { font-size: 12px; color: rgba(255,255,255,.65); }
+.toast .toast-close {
+  background: transparent;
+  border: 0;
+  color: rgba(255,255,255,.4);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color .15s ease;
+}
+.toast .toast-close:hover { color: #fff; }
+
+/* ============================================================
+   Skeleton loaders — appear inside any element with .is-loading
+   ============================================================ */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  color: transparent !important;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  100% { transform: translateX(100%); }
+}
+.skeleton-line { height: 12px; margin: 6px 0; border-radius: 4px; }
+.skeleton-line.tall { height: 18px; }
+.skeleton-line.short { width: 60%; }
+.skeleton-line.tiny { width: 35%; height: 10px; }
+.skeleton-block { height: 80px; border-radius: 8px; }
+
+/* ============================================================
+   Model Card — slide-in panel inside the forecast pane
+   ============================================================ */
+.model-card {
+  border-top: 1px solid var(--hairline);
+  padding: 10px 12px 14px;
+  font-size: 12px;
+  background: linear-gradient(180deg, rgba(145,70,255,0.04), transparent);
+}
+.model-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.model-card__title {
+  font-size: 11px;
+  color: var(--mute);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.model-card__verdict {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.model-card__verdict.is-winning {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.32);
+  background: rgba(74, 222, 128, 0.08);
+}
+.model-card__verdict.is-losing {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.32);
+  background: rgba(251, 191, 36, 0.08);
+}
+.model-card__grid {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(4, 1fr) auto;
+  gap: 4px 10px;
+  align-items: center;
+  font-size: 11.5px;
+}
+.model-card__grid .mc-head {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--mute-2);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--hairline);
+}
+.model-card__grid .mc-row { display: contents; }
+.model-card__grid .mc-name { color: var(--ink); font-weight: 500; }
+.model-card__grid .mc-name.is-picked {
+  color: #b388ff;
+}
+.model-card__grid .mc-name.is-picked::before {
+  content: "★ ";
+  color: #b388ff;
+}
+.model-card__grid .mc-val { font-family: var(--mono); color: var(--ink-2); }
+.model-card__grid .mc-pick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 9px;
+  background: transparent;
+  color: var(--mute-2);
+}
+.model-card__grid .mc-pick.is-on {
+  background: linear-gradient(135deg, rgba(145,70,255,0.45), rgba(145,70,255,0.18));
+  color: #fff;
+}
+.model-card__foot {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--hairline);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 11px;
+  color: var(--mute);
+}
+.model-card__foot b { color: var(--ink); font-weight: 600; }
+@media (max-width: 720px) {
+  .model-card__grid { grid-template-columns: 1fr; gap: 2px; }
+  .model-card__grid .mc-head { display: none; }
+  .model-card__grid .mc-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .model-card__grid .mc-val::before {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--mute-2);
+    margin-right: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .model-card__grid .mc-val[data-k="mae"]::before { content: "MAE"; }
+  .model-card__grid .mc-val[data-k="rmse"]::before { content: "RMSE"; }
+  .model-card__grid .mc-val[data-k="mape"]::before { content: "MAPE"; }
+  .model-card__grid .mc-val[data-k="r2"]::before { content: "R²"; }
+}
 </style>
 </head>
 <body>
@@ -3277,6 +3490,209 @@ async function boot() {
   }, 850)
 }
 boot();
+</script>
+
+<!-- ===========================================================
+     KC Live polish layer: toasts + model card + skeleton loaders
+     Pure additive — does not modify any existing render function.
+     =========================================================== -->
+<script>
+(function () {
+  // ---------- Toast system ----------
+  const stack = document.createElement('div');
+  stack.className = 'toast-stack';
+  stack.setAttribute('role', 'status');
+  stack.setAttribute('aria-live', 'polite');
+  document.body.appendChild(stack);
+
+  const ICONS = {
+    info:    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+    live:    '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>',
+    anomaly: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
+    success: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    error:   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+  };
+
+  function showToast(kind, title, message, timeoutMs) {
+    const t = document.createElement('div');
+    t.className = 'toast toast--' + (kind || 'info');
+    t.innerHTML =
+      '<span class="toast-icon" aria-hidden="true">' + (ICONS[kind] || ICONS.info) + '</span>' +
+      '<div class="toast-body"><b>' + escapeText(title || '') + '</b>' +
+      (message ? '<span>' + escapeText(message) + '</span>' : '') + '</div>' +
+      '<button class="toast-close" aria-label="Dismiss">×</button>';
+    stack.appendChild(t);
+    requestAnimationFrame(() => t.classList.add('is-visible'));
+    const dismiss = () => {
+      t.classList.remove('is-visible');
+      setTimeout(() => t.remove(), 400);
+    };
+    t.querySelector('.toast-close').addEventListener('click', dismiss);
+    setTimeout(dismiss, timeoutMs || 5400);
+    return dismiss;
+  }
+  function escapeText(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+  window.kcToast = showToast;
+
+  // ---------- Live-status & anomaly notifications ----------
+  let previousLiveSet = null;
+  let lastAnomalyCount = 0;
+  let firstPaint = true;
+
+  function diffNotify() {
+    try {
+      const s = window.state || {};
+      const streamers = (s.dashboard && s.dashboard.streamers) || [];
+      const nowLive = new Set(streamers.filter(c => c && c.is_live).map(c => c.login));
+
+      if (previousLiveSet && !firstPaint) {
+        nowLive.forEach((login) => {
+          if (!previousLiveSet.has(login)) {
+            const c = streamers.find(x => x.login === login);
+            showToast('live', (c?.display_name || login) + ' is live',
+              (c?.game_name || 'now streaming') + ' · ' + (c?.viewer_count ? c.viewer_count.toLocaleString() + ' viewers' : ''));
+          }
+        });
+        previousLiveSet.forEach((login) => {
+          if (!nowLive.has(login)) {
+            const c = streamers.find(x => x.login === login);
+            showToast('info', (c?.display_name || login) + ' went offline', '');
+          }
+        });
+      }
+      previousLiveSet = nowLive;
+
+      // Anomaly toast — only when the count increases vs. last seen.
+      const a = (s.prediction && s.prediction.anomalies) || [];
+      if (!firstPaint && a.length > lastAnomalyCount && a.length > 0) {
+        const newest = a[a.length - 1];
+        showToast('anomaly', 'Anomaly detected',
+          'z-score ' + (newest.z_score || 0).toFixed(2) + ' · ' +
+          (newest.viewer_count || 0).toLocaleString() + ' viewers');
+      }
+      lastAnomalyCount = a.length;
+      firstPaint = false;
+    } catch (e) { /* never break the dashboard */ }
+  }
+
+  // ---------- Model Card rendering ----------
+  function ensureModelCardSlot() {
+    let slot = document.getElementById('modelCard');
+    if (slot) return slot;
+    const wrap = document.querySelector('.forecast-pane .fc-table-wrap');
+    if (!wrap || !wrap.parentNode) return null;
+    slot = document.createElement('div');
+    slot.id = 'modelCard';
+    slot.className = 'model-card';
+    slot.setAttribute('aria-label', 'Forecast model card');
+    wrap.parentNode.appendChild(slot);
+    return slot;
+  }
+
+  function fmtNum(n, digits) {
+    if (n == null || isNaN(n)) return '—';
+    if (Math.abs(n) >= 1000) return Math.round(n).toLocaleString();
+    return Number(n).toFixed(digits == null ? 2 : digits);
+  }
+
+  function renderModelCard() {
+    const slot = ensureModelCardSlot();
+    if (!slot) return;
+    const pred = (window.state || {}).prediction;
+    if (!pred || pred.status !== 'success' || !pred.model_card) {
+      slot.innerHTML = '';
+      return;
+    }
+    const beats = pred.beats_naive_baseline;
+    const conf = pred.confidence_label || 'unknown';
+    const verdictClass = beats ? 'is-winning' : 'is-losing';
+    const verdictLabel = beats ? 'Beats baseline' : 'Below baseline';
+    const ens = pred.ensemble_evaluation || {};
+    const card = pred.model_card || {};
+
+    let rows = '<div class="mc-row"><div class="mc-head">Model</div>' +
+      '<div class="mc-head">MAE</div><div class="mc-head">RMSE</div>' +
+      '<div class="mc-head">MAPE</div><div class="mc-head">R²</div>' +
+      '<div class="mc-head" title="Walk-forward CV">CV·MAE</div></div>';
+
+    Object.entries(card).forEach(([name, meta]) => {
+      const e = meta.evaluation || {};
+      const picked = !!meta.selected_in_ensemble;
+      rows += '<div class="mc-row">' +
+        '<div class="mc-name' + (picked ? ' is-picked' : '') + '">' + escapeText(name.replace('_', ' ')) + '</div>' +
+        '<div class="mc-val" data-k="mae">' + fmtNum(e.mae, 0) + '</div>' +
+        '<div class="mc-val" data-k="rmse">' + fmtNum(e.rmse, 0) + '</div>' +
+        '<div class="mc-val" data-k="mape">' + fmtNum(e.mape, 1) + '%</div>' +
+        '<div class="mc-val" data-k="r2">' + fmtNum(e.r2, 2) + '</div>' +
+        '<div class="mc-val" data-k="cv">' + fmtNum(meta.cv_mae, 0) + '</div>' +
+        '</div>';
+    });
+
+    slot.innerHTML =
+      '<div class="model-card__header">' +
+        '<div class="model-card__title">Model Card · ensemble forecast</div>' +
+        '<span class="model-card__verdict ' + verdictClass + '">' + escapeText(verdictLabel) + '</span>' +
+      '</div>' +
+      '<div class="model-card__grid">' + rows + '</div>' +
+      '<div class="model-card__foot">' +
+        '<span>Ensemble: <b>' + (pred.ensemble_members || []).join(' + ') + '</b></span>' +
+        '<span>Confidence: <b>' + escapeText(conf) + '</b></span>' +
+        '<span>Aggregate MAE: <b>' + fmtNum(ens.mae, 0) + '</b></span>' +
+        '<span>R²: <b>' + fmtNum(ens.r2, 2) + '</b></span>' +
+        '<span>Samples: <b>' + (pred.samples_used || 0) + '</b></span>' +
+      '</div>';
+  }
+
+  // ---------- Skeleton loaders ----------
+  function paintSkeletons() {
+    const fc = document.getElementById('fcTbody');
+    if (fc && !fc.innerHTML.trim()) {
+      let html = '';
+      for (let i = 0; i < 6; i++) {
+        html += '<tr><td colspan="7"><div class="skeleton skeleton-line"></div></td></tr>';
+      }
+      fc.innerHTML = html;
+    }
+    const ev = document.getElementById('eventsTbody');
+    if (ev && !ev.innerHTML.trim()) {
+      let html = '';
+      for (let i = 0; i < 5; i++) {
+        html += '<tr><td colspan="4"><div class="skeleton skeleton-line"></div></td></tr>';
+      }
+      ev.innerHTML = html;
+    }
+    const pos = document.getElementById('positionsTbody');
+    if (pos && !pos.innerHTML.trim()) {
+      let html = '';
+      for (let i = 0; i < 5; i++) {
+        html += '<tr><td colspan="4"><div class="skeleton skeleton-line"></div></td></tr>';
+      }
+      pos.innerHTML = html;
+    }
+  }
+  paintSkeletons();
+
+  // ---------- Hook into render loop without modifying it ----------
+  // We poll state every second and re-render the model card + diff-notify.
+  // 1-second cadence is well under any data refresh interval, so this is
+  // effectively reactive without touching the original code path.
+  setInterval(() => {
+    renderModelCard();
+    diffNotify();
+  }, 1000);
+
+  // ---------- Refresh button feedback ----------
+  const refreshBtn = document.getElementById('refreshBtn');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+      showToast('success', 'Refreshing telemetry', 'Pulling latest snapshot…', 2400);
+    });
+  }
+})();
 </script>
 </body>
 </html>
