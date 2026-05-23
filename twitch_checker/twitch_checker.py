@@ -148,6 +148,16 @@ def normalize_login(value: Any) -> str:
     return login if LOGIN_RE.fullmatch(login) else ""
 
 
+def fallback_display_name(login: str) -> str:
+    known_names = {
+        "kaicenat": "Kai Cenat",
+        "caseoh_": "CaseOh",
+        "xqc": "xQc",
+        "nmplol": "Nmplol",
+    }
+    return known_names.get(login, login.replace("_", " ").strip().title())
+
+
 def parse_streamers(raw: str | list[str] | None) -> list[str]:
     if raw is None:
         return DEFAULT_STREAMERS.copy()
@@ -714,6 +724,49 @@ class TwitchService:
         embed_parent: str = "localhost",
     ) -> dict[str, Any]:
         """Lightweight stream cards for live/embed-focused frontends."""
+        if self.config_error():
+            parent = embed_parent or "localhost"
+            streams = [
+                {
+                    "login": login,
+                    "display_name": fallback_display_name(login),
+                    "is_live": False,
+                    "title": "Connect Twitch API credentials to activate live telemetry.",
+                    "game_name": "Awaiting API",
+                    "viewer_count": 0,
+                    "uptime": "Offline",
+                    "started_at": None,
+                    "profile_image_url": "",
+                    "thumbnail_url": "",
+                    "url": f"https://www.twitch.tv/{login}",
+                    "embed_url": (
+                        f"https://player.twitch.tv/?channel={login}"
+                        f"&parent={parent}&autoplay=false&muted=true"
+                    ),
+                    "chat_url": (
+                        f"https://www.twitch.tv/embed/{login}/chat"
+                        f"?parent={parent}&darkpopout"
+                    ),
+                    "groups": [group for group, members in self.config.streamer_groups.items() if login in members],
+                    "trend_score": 0,
+                    "best_peak_viewers": 0,
+                    "consistency_score": 0,
+                    "recent_snapshots": self.state_store.recent_snapshots(login, 12),
+                }
+                for login in self.config.streamers
+            ]
+            return {
+                "generated_at": utc_now_iso(),
+                "summary": {
+                    "tracked": len(streams),
+                    "live": 0,
+                    "offline": len(streams),
+                    "current_viewers": 0,
+                },
+                "embed_parent": parent,
+                "streams": [] if only_live else streams,
+            }
+
         dashboard = self.get_dashboard()
         cards = dashboard.get("streamers", [])
         if only_live:
@@ -1199,10 +1252,46 @@ class TwitchService:
             "cache_is_fresh": cache["is_fresh"],
         }
 
+        def placeholder_card(login: str) -> dict[str, Any]:
+            display_name = fallback_display_name(login)
+            return {
+                "login": login,
+                "display_name": display_name,
+                "is_live": False,
+                "title": "Connect Twitch API credentials to activate live telemetry.",
+                "game_name": "Awaiting API",
+                "viewer_count": 0,
+                "started_at": None,
+                "uptime": "Offline",
+                "profile_image_url": "",
+                "offline_image_url": "",
+                "thumbnail_url": "",
+                "url": f"https://www.twitch.tv/{login}",
+                "description": "Configured locally. Live status, viewers, category, and snapshots appear after credentials are connected.",
+                "broadcaster_type": "standard",
+                "last_seen_at": None,
+                "groups": [group for group, members in self.config.streamer_groups.items() if login in members],
+                "recent_sessions": self.state_store.recent_sessions(login, self.config.history_limit),
+                "recent_snapshots": self.state_store.recent_snapshots(login, 12),
+                "analytics": {
+                    "session_count": 0,
+                    "avg_duration_minutes": 0,
+                    "best_peak_viewers": 0,
+                    "avg_peak_viewers": 0,
+                    "trend_score": 0,
+                    "top_category": "Awaiting API",
+                    "consistency_score": 0,
+                    "hourly_activity": [0] * 24,
+                    "weekday_activity": [0] * 7,
+                    "category_breakdown": [],
+                },
+            }
+
         if health["configured"]:
             dashboard = self.get_dashboard(force_refresh=force_refresh)
             command_center = self._build_command_center(dashboard)
         else:
+            placeholder_streamers = [placeholder_card(login) for login in self.config.streamers]
             dashboard = {
                 "generated_at": utc_now_iso(),
                 "title": self.config.frontend_title,
@@ -1218,7 +1307,7 @@ class TwitchService:
                 "leaderboards": {"live_now": [], "best_peak": [], "most_active": [], "trend": []},
                 "category_mix": [],
                 "alerts": [],
-                "streamers": [],
+                "streamers": placeholder_streamers,
                 "compare_defaults": self.config.streamers[: min(4, len(self.config.streamers))],
             }
             command_center = self._build_command_center_fallback(health["error"] or "Configuration required.")
@@ -1437,7 +1526,7 @@ class TwitchService:
             "watchlist_pulse": [
                 {
                     "login": login,
-                    "display_name": login,
+                    "display_name": fallback_display_name(login),
                     "status": "standby",
                     "value": 0,
                     "detail": "Awaiting live audience data after credentials are added.",
