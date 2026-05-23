@@ -19,6 +19,7 @@ up even when the session as a whole is volatile.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import numpy as np
@@ -28,6 +29,19 @@ from sklearn.preprocessing import PolynomialFeatures
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 analyzer = SentimentIntensityAnalyzer()
+
+
+def _json_safe(value: Any) -> Any:
+    """Recursively remove non-finite values before Flask serializes JSON."""
+    if isinstance(value, np.generic):
+        value = value.item()
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -352,7 +366,7 @@ def predict_peak_viewers(data_points: list[dict[str, Any]]) -> dict[str, Any]:
         for name, meta in sub_models.items()
     }
 
-    return {
+    return _json_safe({
         "status": "success",
         "predicted_peak": max(int(np.max(ensemble_out)), int(y.max())),
         "baseline_peak": int(current),
@@ -371,4 +385,4 @@ def predict_peak_viewers(data_points: list[dict[str, Any]]) -> dict[str, Any]:
         "model_card": model_card,
         "ensemble_evaluation": ensemble_eval,
         "beats_naive_baseline": beats_baseline,
-    }
+    })
