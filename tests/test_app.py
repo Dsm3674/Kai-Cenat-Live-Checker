@@ -246,5 +246,66 @@ class AppRoutesTest(unittest.TestCase):
             self.assertEqual(remove_response.get_json()["streamers"], [])
 
 
+    def test_workspace_route_passes_scoped_logins(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_bundle(self, selected_login=None, force_refresh=False, logins=None):
+            captured["logins"] = logins
+            return SAMPLE_WORKSPACE
+
+        with patch.object(TwitchService, "get_workspace_bundle", new=fake_bundle):
+            app = create_app()
+            client = app.test_client()
+
+            response = client.get("/api/workspace?logins=kaicenat,pokimane")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(captured["logins"], ["kaicenat", "pokimane"])
+
+    def test_channel_clips_route_returns_real_clip_payload(self) -> None:
+        sample = {
+            "login": "kaicenat",
+            "display_name": "Kai Cenat",
+            "clips": [
+                {"id": "abc", "title": "Insane moment", "url": "https://clips.twitch.tv/abc", "view_count": 5000}
+            ],
+        }
+        with patch.object(TwitchService, "get_channel_clips", return_value=sample):
+            app = create_app()
+            client = app.test_client()
+
+            response = client.get("/api/channel/kaicenat/clips?limit=6")
+            payload = response.get_json()
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(payload["clips"][0]["view_count"], 5000)
+
+    def test_channel_videos_route_returns_real_vod_payload(self) -> None:
+        sample = {
+            "login": "kaicenat",
+            "display_name": "Kai Cenat",
+            "videos": [
+                {"id": "v1", "title": "Past broadcast", "url": "https://www.twitch.tv/videos/v1", "duration": "3h10m"}
+            ],
+        }
+        with patch.object(TwitchService, "get_channel_videos", return_value=sample):
+            app = create_app()
+            client = app.test_client()
+
+            response = client.get("/api/channel/kaicenat/videos")
+            payload = response.get_json()
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(payload["videos"][0]["duration"], "3h10m")
+
+    def test_channel_clips_route_rejects_invalid_login(self) -> None:
+        app = create_app()
+        client = app.test_client()
+
+        response = client.get("/api/channel/has a space/clips")
+
+        self.assertEqual(response.status_code, 400)
+
+
 if __name__ == "__main__":
     unittest.main()

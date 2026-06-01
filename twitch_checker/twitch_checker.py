@@ -1239,7 +1239,16 @@ class TwitchService:
             },
         }
 
-    def get_workspace_bundle(self, selected_login: str | None = None, force_refresh: bool = False) -> dict[str, Any]:
+    def get_workspace_bundle(
+        self,
+        selected_login: str | None = None,
+        force_refresh: bool = False,
+        logins: list[str] | None = None,
+    ) -> dict[str, Any]:
+        # ``logins`` lets each browser request a view scoped to its own
+        # locally-persisted watchlist instead of the global server config.
+        scoped_logins = parse_streamers(logins) if logins else None
+        effective_logins = scoped_logins or self.config.streamers
         cache = self.cache_status()
         health = {
             "ok": True,
@@ -1288,18 +1297,18 @@ class TwitchService:
             }
 
         if health["configured"]:
-            dashboard = self.get_dashboard(force_refresh=force_refresh)
+            dashboard = self.get_dashboard(logins=scoped_logins, force_refresh=force_refresh)
             command_center = self._build_command_center(dashboard)
         else:
-            placeholder_streamers = [placeholder_card(login) for login in self.config.streamers]
+            placeholder_streamers = [placeholder_card(login) for login in effective_logins]
             dashboard = {
                 "generated_at": utc_now_iso(),
                 "title": self.config.frontend_title,
                 "check_interval": self.config.check_interval,
                 "summary": {
-                    "tracked": len(self.config.streamers),
+                    "tracked": len(effective_logins),
                     "live": 0,
-                    "offline": len(self.config.streamers),
+                    "offline": len(effective_logins),
                     "current_viewers": 0,
                 },
                 "overview": {"dominant_category": "Awaiting data"},
@@ -1308,7 +1317,7 @@ class TwitchService:
                 "category_mix": [],
                 "alerts": [],
                 "streamers": placeholder_streamers,
-                "compare_defaults": self.config.streamers[: min(4, len(self.config.streamers))],
+                "compare_defaults": effective_logins[: min(4, len(effective_logins))],
             }
             command_center = self._build_command_center_fallback(health["error"] or "Configuration required.")
 
@@ -1329,7 +1338,7 @@ class TwitchService:
             "health": health,
             "dashboard": dashboard,
             "command_center": command_center,
-            "anomaly_summary": self.get_anomaly_summary(self.config.streamers if health["configured"] else None),
+            "anomaly_summary": self.get_anomaly_summary(effective_logins if health["configured"] else None),
             "selected_streamer": selected_stream,
             "integration": {
                 "recommended_refresh_seconds": self.config.check_interval,
@@ -1465,6 +1474,81 @@ class TwitchService:
         self.config.save_to_file()
         self.invalidate_cache()
         return self.get_config()
+
+    def get_channel_clips(self, login: str, limit: int = 8) -> dict[str, Any]:
+        """Top clips for a channel, straight from the Twitch Helix API (real data)."""
+        normalized = normalize_login(login)
+        if not normalized:
+            raise ValueError("invalid_login")
+        user = self._fetch_users([normalized]).get(normalized)
+        if not user:
+            raise ValueError("not_found")
+
+        capped = max(1, min(int(limit or 8), 20))
+        payload = self._request(
+            "clips",
+            [("broadcaster_id", str(user["id"])), ("first", str(capped))],
+        )
+        clips = [
+            {
+                "id": item.get("id"),
+                "title": item.get("title") or "Untitled clip",
+                "url": item.get("url"),
+                "thumbnail_url": item.get("thumbnail_url", ""),
+                "view_count": item.get("view_count", 0),
+                "duration": item.get("duration"),
+                "created_at": item.get("created_at"),
+                "creator_name": item.get("creator_name"),
+                "game_id": item.get("game_id"),
+            }
+            for item in payload.get("data", [])
+            if item.get("id")
+        ]
+        clips.sort(key=lambda clip: clip.get("view_count", 0), reverse=True)
+        return {
+            "login": normalized,
+            "display_name": user.get("display_name", normalized),
+            "clips": clips,
+        }
+
+    def get_channel_videos(self, login: str, limit: int = 8) -> dict[str, Any]:
+        """Recent past broadcasts (VODs) for a channel from the Twitch Helix API."""
+        normalized = normalize_login(login)
+        if not normalized:
+            raise ValueError("invalid_login")
+        user = self._fetch_users([normalized]).get(normalized)
+        if not user:
+            raise ValueError("not_found")
+
+        capped = max(1, min(int(limit or 8), 20))
+        payload = self._request(
+            "videos",
+            [
+                ("user_id", str(user["id"])),
+                ("first", str(capped)),
+                ("type", "archive"),
+                ("sort", "time"),
+            ],
+        )
+        videos = [
+            {
+                "id": item.get("id"),
+                "title": item.get("title") or "Past broadcast",
+                "url": item.get("url"),
+                "thumbnail_url": item.get("thumbnail_url", ""),
+                "view_count": item.get("view_count", 0),
+                "duration": item.get("duration"),
+                "created_at": item.get("created_at"),
+                "published_at": item.get("published_at"),
+            }
+            for item in payload.get("data", [])
+            if item.get("id")
+        ]
+        return {
+            "login": normalized,
+            "display_name": user.get("display_name", normalized),
+            "videos": videos,
+        }
 
     def prediction_data_for_login(self, login: str, limit: int = 60) -> list[dict[str, Any]]:
         snapshots = get_recent_snapshots(login, limit) if ML_AVAILABLE else []
@@ -2119,7 +2203,15 @@ def create_app() -> Flask:
     def workspace() -> Any:
         refresh = request.args.get("refresh") in {"1", "true", "yes"}
         selected_login = request.args.get("selected")
-        return jsonify(service.get_workspace_bundle(selected_login=selected_login, force_refresh=refresh))
+        requested = request.args.get("logins")
+        logins = parse_streamers(requested) if requested else None
+        return jsonify(
+            service.get_workspace_bundle(
+                selected_login=selected_login,
+                force_refresh=refresh,
+                logins=logins,
+            )
+        )
 
     @app.get("/api/anomalies")
     def anomalies() -> Any:
@@ -2156,6 +2248,28 @@ def create_app() -> Flask:
                 "recent_snapshots": service.state_store.recent_snapshots(normalized, config.snapshot_limit),
             }
         )
+
+    @app.get("/api/channel/<login>/clips")
+    def channel_clips(login: str) -> Any:
+        normalized = normalize_login(login)
+        if not normalized:
+            return jsonify({"error": "invalid_login", "detail": "Invalid Twitch login."}), 400
+        try:
+            limit = int(request.args.get("limit", 8))
+        except (TypeError, ValueError):
+            limit = 8
+        return json_service_response(lambda: service.get_channel_clips(normalized, limit))
+
+    @app.get("/api/channel/<login>/videos")
+    def channel_videos(login: str) -> Any:
+        normalized = normalize_login(login)
+        if not normalized:
+            return jsonify({"error": "invalid_login", "detail": "Invalid Twitch login."}), 400
+        try:
+            limit = int(request.args.get("limit", 8))
+        except (TypeError, ValueError):
+            limit = 8
+        return json_service_response(lambda: service.get_channel_videos(normalized, limit))
 
     @app.get("/api/ml/predict/<login>")
     def predict(login: str) -> Any:
