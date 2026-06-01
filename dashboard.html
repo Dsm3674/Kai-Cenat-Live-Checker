@@ -2801,6 +2801,38 @@ state.userTracked=loadTracked();
 const NOTIFY_KEY='kc.notify.v1';
 state.notify=localStorage.getItem(NOTIFY_KEY)==='1';
 state.prevLive=new Map();
+let kcAudioCtx=null;
+function ensureAudio() {
+  try {
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC)return;
+    if(!kcAudioCtx)kcAudioCtx=new AC();
+    if(kcAudioCtx.state==='suspended')kcAudioCtx.resume()
+  }
+  catch(_) {
+
+  }
+}
+function playPing() {
+  try {
+    ensureAudio();
+    if(!kcAudioCtx)return;
+    const t=kcAudioCtx.currentTime, o=kcAudioCtx.createOscillator(), g=kcAudioCtx.createGain();
+    o.connect(g);
+    g.connect(kcAudioCtx.destination);
+    o.type='sine';
+    o.frequency.setValueAtTime(880, t);
+    o.frequency.setValueAtTime(1175, t+0.11);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.25, t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.4);
+    o.start(t);
+    o.stop(t+0.42)
+  }
+  catch(_) {
+
+  }
+}
 function applyNotifyButton() {
   const btn=document.getElementById('notifyBtn');
   if(!btn)return;
@@ -2821,7 +2853,9 @@ async function toggleNotify() {
     }
     state.notify=true;
     localStorage.setItem(NOTIFY_KEY, '1');
-    toast('Alerts on', 'You will be pinged when a tracked streamer goes live.')
+    ensureAudio();
+    playPing();
+    toast('Alerts on', 'You will be pinged (with sound) when a tracked streamer goes live.')
   }
   else {
     state.notify=false;
@@ -2852,6 +2886,7 @@ function detectGoLive(streamers) {
       catch(_) {
 
       }
+      playPing();
       toast('🔴 '+s.display_name+' is live', body)
     }
     state.prevLive.set(s.login, !!s.is_live)
