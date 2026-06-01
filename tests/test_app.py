@@ -298,6 +298,61 @@ class AppRoutesTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(payload["videos"][0]["duration"], "3h10m")
 
+    def test_discord_status_route(self) -> None:
+        with patch.object(
+            TwitchService,
+            "discord_status",
+            return_value={"configured": True, "enabled": True, "webhook_masked": "…abc123"},
+        ):
+            app = create_app()
+            client = app.test_client()
+
+            response = client.get("/api/integrations/discord")
+            payload = response.get_json()
+
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(payload["enabled"])
+
+    def test_discord_set_route_updates_settings(self) -> None:
+        with patch.object(
+            TwitchService,
+            "update_discord_settings",
+            return_value={"configured": True, "enabled": True, "webhook_masked": "…wxyz99"},
+        ):
+            app = create_app()
+            client = app.test_client()
+
+            response = client.post(
+                "/api/integrations/discord",
+                json={"webhook": "https://discord.com/api/webhooks/1/abc", "enabled": True},
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.get_json()["configured"])
+
+    def test_discord_set_route_rejects_bad_webhook(self) -> None:
+        app = create_app()
+        client = app.test_client()
+
+        response = client.post("/api/integrations/discord", json={"webhook": "https://evil.example/x"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "invalid_webhook")
+
+    def test_discord_test_route(self) -> None:
+        with patch.object(
+            TwitchService,
+            "send_discord_test",
+            return_value={"ok": True, "detail": "Test message delivered to Discord."},
+        ):
+            app = create_app()
+            client = app.test_client()
+
+            response = client.post("/api/integrations/discord/test")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.get_json()["ok"])
+
     def test_channel_clips_route_rejects_invalid_login(self) -> None:
         app = create_app()
         client = app.test_client()

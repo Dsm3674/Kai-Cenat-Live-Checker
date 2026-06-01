@@ -2678,7 +2678,25 @@ a {
 <body>
 <div class="app-enter" id="appEnter"><div class="ring"></div></div>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="sparkUpGrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#00f5b3" stop-opacity=".5"/><stop offset="100%" stop-color="#00f5b3" stop-opacity="0"/></linearGradient><linearGradient id="sparkDownGrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#ff4d6d" stop-opacity=".5"/><stop offset="100%" stop-color="#ff4d6d" stop-opacity="0"/></linearGradient><linearGradient id="bigSparkGrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#b388ff" stop-opacity=".55"/><stop offset="100%" stop-color="#b388ff" stop-opacity="0"/></linearGradient><linearGradient id="forecastBand" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#9146ff" stop-opacity=".25"/><stop offset="100%" stop-color="#9146ff" stop-opacity="0"/></linearGradient></defs></svg>
-<div class="app" id="app" data-view="desk"><header class="topbar"><a class="brand" href="/" aria-label="KC Live home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 3 4 14 11 14 9 21 20 10 13 10 13 3"/></svg></span><span class="brand-meta"><b>KC&nbsp;Live</b><span>OPS&nbsp;DESK</span></span></a><div class="topbar-status" id="topbarStatus" title="Cache & live cycle"><span class="dot"></span><span id="topbarStatusText">Connecting…</span></div><nav class="tabs" aria-label="Workspaces"><button class="tab is-active" data-view="desk" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg><span class="label-text">Streamer Desk</span></button><button class="tab" data-view="streams" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg><span class="label-text">Streams</span></button><button class="tab" data-view="monitoring" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/></svg><span class="label-text">Monitoring</span></button><button class="tab" data-view="forecasts" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span class="label-text">Forecasts</span></button><button class="tab" data-view="signal" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7"/><rect x="12" y="6" width="3" height="11"/><rect x="17" y="13" width="3" height="4"/></svg><span class="label-text">Signal Lab</span></button></nav><div class="posture-pill" id="posturePill" data-posture=""><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg><span class="label">Posture</span><span class="value" id="postureValue">—</span></div><div class="topbar-right"><button class="btn-pill" id="refreshBtn" type="button" title="Refresh now"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh</button><button class="profile-pill" type="button">Operator<span class="avatar">KC</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button></div></header><section class="api-shelf" aria-label="API status"><div class="api-shelf__label">API surface</div><div class="api-shelf__chips" id="apiShelf"><article class="api-chip" data-status="blocked"><b>Loading routes</b><span>pending</span></article></div></section><main class="workspace"><section class="pane p-account" aria-label="Workspace summary"><div class="pane-head"><span class="swatch" style="background: rgba(78,161,255,0.6)"></span><span class="label">Workspace<span class="meta">· KC-OPS</span></span></div><div class="account"><div class="account-summary"><div class="row1"><span class="name">All channels</span><a class="deposit" href="https://github.com/Dsm3674/Kai-Cenat-Live-Checker#setup" target="_blank" rel="noopener">Connect API</a></div><div class="total" id="accountTotal">—</div><div class="delta up" id="accountDelta"><span>—</span><span class="meta">last 24h</span></div><div class="account-spark" id="accountSpark"></div></div><div class="account-overview"><h6>Overview</h6><div class="account-row"><span class="k">Live now</span><span class="v" id="ovLiveNow">—</span></div><div class="account-row"><span class="k">Watchlist size</span><span class="v" id="ovWatchSize">—</span></div><div class="account-row"><span class="k">Cache age</span><span class="v" id="ovCacheAge">—</span></div><div class="account-row"><span class="k">Forecast model</span><span class="v" id="ovModel">—</span></div><div class="account-row"><span class="k">Dominant category</span><span class="v" id="ovCategory">—</span></div></div><div class="account-overview"><h6>System checks</h6><div id="systemChecks"></div></div></div></section><section class="pane p-movers" aria-label="Trending streamers"><div class="pane-head"><span class="swatch" style="background: rgba(179,136,255,0.6)"></span><span class="label">Watchlist · Trending</span><span class="actions"><button class="iconbtn" id="addStreamerBtn" title="Add streamer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></span></div><div class="movers-head"><h3>Top movers</h3></div><div class="movers-table" id="moversTable" role="table"><div class="col-head" role="row"><span>#</span><span>Channel</span><span></span><span class="ralign">Viewers</span><span class="ralign">Trend</span></div></div></section><section class="pane chart-pane p-chart" aria-label="Primary chart"><div class="chart-head"><span class="swatch"></span><div class="chart-symbol"><span class="sym" id="chartSym">—</span><span class="price n" id="chartPrice">—</span><span class="change" id="chartChange">—</span><span class="game" id="chartGame">—</span></div><div class="actions"><button class="iconbtn" id="chartCompareBtn" title="Compare top channels"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="3" x2="6" y2="21"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="18" y1="3" x2="18" y2="21"/></svg></button></div></div><div class="chart-bid-ask"><div class="bidask-btns"><button class="btn-track" id="trackBtn">Track</button><button class="btn-watch-twitch" id="watchTwitchBtn">Open on Twitch</button></div><div class="ohlc"><span><b>Peak</b><span id="chartPeak">—</span></span><span><b>Avg</b><span id="chartAvg">—</span></span><span><b>Trend</b><span id="chartTrend">—</span></span><span><b>Up</b><span id="chartUptime">—</span></span></div></div><div class="chart-body" id="chartBody"><div class="chart-empty" id="chartEmpty">Loading chart…</div></div><div class="chart-foot"><div class="ranges" role="tablist" id="chartRanges"><button data-range="60" class="is-active">1H</button><button data-range="180">3H</button><button data-range="360">6H</button><button data-range="all">All</button></div><div class="interval">Source: <b id="chartSource">snapshots</b></div></div><div class="chart-sessions" id="chartSessions"></div><div class="chart-clips" id="chartClips"></div></section><section class="pane forecast-pane p-forecast" aria-label="Forecast horizons"><div class="fc-head"><span class="swatch"></span><span class="symtag" id="fcSymtag">—<span class="conf-pill" id="fcConfPill" data-conf="">—</span></span><span class="actions"></span></div><div class="fc-table-wrap"><table class="fc-table"><thead><tr><th>MAE</th><th>Lower</th><th>Upper</th><th class="strike center">Horizon</th><th>Predicted</th><th>Δ now</th><th>Trend</th></tr></thead><tbody id="fcTbody"></tbody></table></div></section><section class="pane list-pane p-positions" aria-label="Active positions"><div class="pane-head"><span class="swatch" style="background: rgba(0,245,179,0.6)"></span><span class="label">Live · Positions</span></div><div class="list-head"><h3>Channels</h3></div><div class="list-table-wrap"><table class="list-table"><thead><tr><th>Channel</th><th>Status</th><th>Viewers</th><th>Peak</th></tr></thead><tbody id="positionsTbody"></tbody></table></div></section><section class="pane list-pane p-events" aria-label="Recent events"><div class="pane-head"><span class="swatch" style="background: rgba(255,181,71,0.6)"></span><span class="label">Event wire</span></div><div class="list-head"><h3>Recent events</h3></div><div class="list-table-wrap"><table class="list-table"><thead><tr><th>Channel</th><th>Severity</th><th>Type</th><th>Time</th></tr></thead><tbody id="eventsTbody"></tbody></table></div></section><section class="pane p-streams" aria-label="Stream player grid"><div class="streams-head"><h2>Streams</h2><span class="stream-count" id="streamCount">—</span><div class="streams-search" id="streamsSearchWrap"><svg class="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span class="spinner" aria-hidden="true"></span><input type="search" id="streamSearch" placeholder="Search Twitch or filter channels…" autocomplete="off" aria-controls="streamSearchResults" aria-haspopup="listbox" /><div class="search-results" id="streamSearchResults" role="listbox" hidden></div></div><div class="stream-filter" role="tablist"><button data-filter="all" class="is-active">All</button><button data-filter="live">Live only</button><button data-filter="offline">Offline</button></div></div><div class="stream-grid" id="streamGrid"></div></section><section class="pane p-signal" aria-label="Signal Lab analytics"><div class="signal-shell"><header class="signal-hero"><div><div class="signal-title-kicker">Signal Lab · TwitchTracker depth</div><h2 class="signal-title" id="signalTitle">Audience intelligence</h2><p class="signal-subtitle">Market pulse, creator performance, timeline growth, and activity heatmaps built from KC Live telemetry and local history.</p></div><div class="signal-ranges" id="signalRanges"><button data-days="7">7D</button><button data-days="30" class="is-active">30D</button><button data-days="90">3M</button><button data-days="3650">All</button></div></header><section class="signal-grid" id="signalMarketMetrics"></section><section class="signal-grid"><div class="signal-card signal-table-card pad"><h3>Top streams in archive</h3><table class="signal-table"><thead><tr><th>Stream</th><th>Peak</th></tr></thead><tbody id="signalTopStreams"></tbody></table></div><div class="signal-card signal-table-card pad"><h3>Top live channels</h3><table class="signal-table"><thead><tr><th>Channel</th><th>Viewers</th></tr></thead><tbody id="signalTopLive"></tbody></table></div></section><section class="signal-grid"><div class="signal-card signal-full pad"><h3 id="signalPerfHeading">Creator performance</h3><div class="signal-perf-grid" id="signalPerformanceCards"></div></div></section><section class="signal-grid"><div class="signal-card signal-wide pad"><h3>Channel performance over time</h3><div class="signal-chart" id="signalTimelineChart"></div></div><div class="signal-card signal-side pad"><h3>Category mix</h3><div id="signalCategoryMix" class="category-list"></div></div></section><section class="signal-grid"><div class="signal-card signal-full pad"><h3>Activity heatmap</h3><div class="signal-heatmap" id="signalHeatmap"></div><div class="signal-legend"><span>min</span><span class="scale"></span><span>max</span><span class="muted" style="margin-left:auto">Intensity uses streamed minutes per day</span></div></div></section></div></section></main></div><style id="kcMediaStyles">.chart-clips{display:flex;flex-direction:column;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid rgba(244,241,232,.08)}.chart-clips .cm-section{display:flex;flex-direction:column;gap:8px}.chart-clips .cs-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.6}.chart-clips .cm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}.chart-clips .cm-card{display:flex;flex-direction:column;text-decoration:none;color:inherit;border-radius:10px;overflow:hidden;background:rgba(255,255,255,.03);border:1px solid rgba(244,241,232,.08);transition:transform .15s ease,border-color .15s ease}.chart-clips .cm-card:hover{transform:translateY(-2px);border-color:rgba(145,71,255,.55)}.chart-clips .cm-thumb{position:relative;aspect-ratio:16/9;background:#1a1426 center/cover no-repeat}.chart-clips .cm-dur{position:absolute;right:6px;bottom:6px;font-size:10px;font-weight:600;padding:2px 5px;border-radius:5px;background:rgba(0,0,0,.72);color:#fff}.chart-clips .cm-views{position:absolute;left:6px;bottom:6px;font-size:10px;font-weight:600;padding:2px 5px;border-radius:5px;background:rgba(145,71,255,.78);color:#fff;display:flex;align-items:center;gap:3px}.chart-clips .cm-title{font-size:12px;line-height:1.3;padding:7px 8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.chart-clips .cm-empty{font-size:12px;opacity:.55;padding:4px 0}</style>
+<div class="app" id="app" data-view="desk"><header class="topbar"><a class="brand" href="/" aria-label="KC Live home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 3 4 14 11 14 9 21 20 10 13 10 13 3"/></svg></span><span class="brand-meta"><b>KC&nbsp;Live</b><span>OPS&nbsp;DESK</span></span></a><div class="topbar-status" id="topbarStatus" title="Cache & live cycle"><span class="dot"></span><span id="topbarStatusText">Connecting…</span></div><nav class="tabs" aria-label="Workspaces"><button class="tab is-active" data-view="desk" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg><span class="label-text">Streamer Desk</span></button><button class="tab" data-view="streams" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg><span class="label-text">Streams</span></button><button class="tab" data-view="monitoring" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/></svg><span class="label-text">Monitoring</span></button><button class="tab" data-view="forecasts" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span class="label-text">Forecasts</span></button><button class="tab" data-view="signal" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7"/><rect x="12" y="6" width="3" height="11"/><rect x="17" y="13" width="3" height="4"/></svg><span class="label-text">Signal Lab</span></button></nav><div class="posture-pill" id="posturePill" data-posture=""><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg><span class="label">Posture</span><span class="value" id="postureValue">—</span></div><div class="topbar-right"><button class="btn-pill" id="notifyBtn" type="button" title="Browser alerts when a tracked streamer goes live"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="label-text">Alerts</span></button><button class="btn-pill" id="discordBtn" type="button" title="Connect a Discord webhook"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.3 4.4A19 19 0 0 0 15.6 3l-.3.5a14 14 0 0 1 4 2 18 18 0 0 0-13.5 0 14 14 0 0 1 4-2L9.4 3a19 19 0 0 0-4.7 1.4A19.4 19.4 0 0 0 2 17.5a19 19 0 0 0 5.8 2.9l.4-.6c-.6-.2-1.2-.5-1.8-.9l.4-.3a13 13 0 0 0 11.2 0l.4.3c-.6.4-1.2.7-1.8.9l.4.6a19 19 0 0 0 5.8-2.9 19.4 19.4 0 0 0-2.7-13.1ZM9 15.3c-.9 0-1.7-.9-1.7-2s.8-2 1.7-2 1.7.9 1.7 2-.8 2-1.7 2Zm6 0c-.9 0-1.7-.9-1.7-2s.8-2 1.7-2 1.7.9 1.7 2-.8 2-1.7 2Z"/></svg><span class="label-text">Discord</span></button><button class="btn-pill" id="refreshBtn" type="button" title="Refresh now"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh</button><button class="profile-pill" type="button">Operator<span class="avatar">KC</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button></div></header><section class="api-shelf" aria-label="API status"><div class="api-shelf__label">API surface</div><div class="api-shelf__chips" id="apiShelf"><article class="api-chip" data-status="blocked"><b>Loading routes</b><span>pending</span></article></div></section><main class="workspace"><section class="pane p-account" aria-label="Workspace summary"><div class="pane-head"><span class="swatch" style="background: rgba(78,161,255,0.6)"></span><span class="label">Workspace<span class="meta">· KC-OPS</span></span></div><div class="account"><div class="account-summary"><div class="row1"><span class="name">All channels</span><a class="deposit" href="https://github.com/Dsm3674/Kai-Cenat-Live-Checker#setup" target="_blank" rel="noopener">Connect API</a></div><div class="total" id="accountTotal">—</div><div class="delta up" id="accountDelta"><span>—</span><span class="meta">last 24h</span></div><div class="account-spark" id="accountSpark"></div></div><div class="account-overview"><h6>Overview</h6><div class="account-row"><span class="k">Live now</span><span class="v" id="ovLiveNow">—</span></div><div class="account-row"><span class="k">Watchlist size</span><span class="v" id="ovWatchSize">—</span></div><div class="account-row"><span class="k">Cache age</span><span class="v" id="ovCacheAge">—</span></div><div class="account-row"><span class="k">Forecast model</span><span class="v" id="ovModel">—</span></div><div class="account-row"><span class="k">Dominant category</span><span class="v" id="ovCategory">—</span></div></div><div class="account-overview"><h6>System checks</h6><div id="systemChecks"></div></div></div></section><section class="pane p-movers" aria-label="Trending streamers"><div class="pane-head"><span class="swatch" style="background: rgba(179,136,255,0.6)"></span><span class="label">Watchlist · Trending</span><span class="actions"><button class="iconbtn" id="addStreamerBtn" title="Add streamer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></span></div><div class="movers-head"><h3>Top movers</h3></div><div class="movers-table" id="moversTable" role="table"><div class="col-head" role="row"><span>#</span><span>Channel</span><span></span><span class="ralign">Viewers</span><span class="ralign">Trend</span></div></div></section><section class="pane chart-pane p-chart" aria-label="Primary chart"><div class="chart-head"><span class="swatch"></span><div class="chart-symbol"><span class="sym" id="chartSym">—</span><span class="price n" id="chartPrice">—</span><span class="change" id="chartChange">—</span><span class="game" id="chartGame">—</span></div><div class="actions"><button class="iconbtn" id="chartCompareBtn" title="Compare top channels"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="3" x2="6" y2="21"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="18" y1="3" x2="18" y2="21"/></svg></button></div></div><div class="chart-bid-ask"><div class="bidask-btns"><button class="btn-track" id="trackBtn">Track</button><button class="btn-watch-twitch" id="watchTwitchBtn">Open on Twitch</button></div><div class="ohlc"><span><b>Peak</b><span id="chartPeak">—</span></span><span><b>Avg</b><span id="chartAvg">—</span></span><span><b>Trend</b><span id="chartTrend">—</span></span><span><b>Up</b><span id="chartUptime">—</span></span></div></div><div class="chart-body" id="chartBody"><div class="chart-empty" id="chartEmpty">Loading chart…</div></div><div class="chart-foot"><div class="ranges" role="tablist" id="chartRanges"><button data-range="60" class="is-active">1H</button><button data-range="180">3H</button><button data-range="360">6H</button><button data-range="all">All</button></div><div class="interval">Source: <b id="chartSource">snapshots</b></div></div><div class="chart-sessions" id="chartSessions"></div><div class="chart-clips" id="chartClips"></div></section><section class="pane forecast-pane p-forecast" aria-label="Forecast horizons"><div class="fc-head"><span class="swatch"></span><span class="symtag" id="fcSymtag">—<span class="conf-pill" id="fcConfPill" data-conf="">—</span></span><span class="actions"></span></div><div class="fc-table-wrap"><table class="fc-table"><thead><tr><th>MAE</th><th>Lower</th><th>Upper</th><th class="strike center">Horizon</th><th>Predicted</th><th>Δ now</th><th>Trend</th></tr></thead><tbody id="fcTbody"></tbody></table></div></section><section class="pane list-pane p-positions" aria-label="Active positions"><div class="pane-head"><span class="swatch" style="background: rgba(0,245,179,0.6)"></span><span class="label">Live · Positions</span></div><div class="list-head"><h3>Channels</h3></div><div class="list-table-wrap"><table class="list-table"><thead><tr><th>Channel</th><th>Status</th><th>Viewers</th><th>Peak</th></tr></thead><tbody id="positionsTbody"></tbody></table></div></section><section class="pane list-pane p-events" aria-label="Recent events"><div class="pane-head"><span class="swatch" style="background: rgba(255,181,71,0.6)"></span><span class="label">Event wire</span></div><div class="list-head"><h3>Recent events</h3></div><div class="list-table-wrap"><table class="list-table"><thead><tr><th>Channel</th><th>Severity</th><th>Type</th><th>Time</th></tr></thead><tbody id="eventsTbody"></tbody></table></div></section><section class="pane p-streams" aria-label="Stream player grid"><div class="streams-head"><h2>Streams</h2><span class="stream-count" id="streamCount">—</span><div class="streams-search" id="streamsSearchWrap"><svg class="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span class="spinner" aria-hidden="true"></span><input type="search" id="streamSearch" placeholder="Search Twitch or filter channels…" autocomplete="off" aria-controls="streamSearchResults" aria-haspopup="listbox" /><div class="search-results" id="streamSearchResults" role="listbox" hidden></div></div><div class="stream-filter" role="tablist"><button data-filter="all" class="is-active">All</button><button data-filter="live">Live only</button><button data-filter="offline">Offline</button></div></div><div class="stream-grid" id="streamGrid"></div></section><section class="pane p-signal" aria-label="Signal Lab analytics"><div class="signal-shell"><header class="signal-hero"><div><div class="signal-title-kicker">Signal Lab · TwitchTracker depth</div><h2 class="signal-title" id="signalTitle">Audience intelligence</h2><p class="signal-subtitle">Market pulse, creator performance, timeline growth, and activity heatmaps built from KC Live telemetry and local history.</p></div><div class="signal-ranges" id="signalRanges"><button data-days="7">7D</button><button data-days="30" class="is-active">30D</button><button data-days="90">3M</button><button data-days="3650">All</button></div></header><section class="signal-grid" id="signalMarketMetrics"></section><section class="signal-grid"><div class="signal-card signal-table-card pad"><h3>Top streams in archive</h3><table class="signal-table"><thead><tr><th>Stream</th><th>Peak</th></tr></thead><tbody id="signalTopStreams"></tbody></table></div><div class="signal-card signal-table-card pad"><h3>Top live channels</h3><table class="signal-table"><thead><tr><th>Channel</th><th>Viewers</th></tr></thead><tbody id="signalTopLive"></tbody></table></div></section><section class="signal-grid"><div class="signal-card signal-full pad"><h3 id="signalPerfHeading">Creator performance</h3><div class="signal-perf-grid" id="signalPerformanceCards"></div></div></section><section class="signal-grid"><div class="signal-card signal-wide pad"><h3>Channel performance over time</h3><div class="signal-chart" id="signalTimelineChart"></div></div><div class="signal-card signal-side pad"><h3>Category mix</h3><div id="signalCategoryMix" class="category-list"></div></div></section><section class="signal-grid"><div class="signal-card signal-full pad"><h3>Activity heatmap</h3><div class="signal-heatmap" id="signalHeatmap"></div><div class="signal-legend"><span>min</span><span class="scale"></span><span>max</span><span class="muted" style="margin-left:auto">Intensity uses streamed minutes per day</span></div></div></section></div></section></main></div><style id="kcMediaStyles">.chart-clips{display:flex;flex-direction:column;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid rgba(244,241,232,.08)}.chart-clips .cm-section{display:flex;flex-direction:column;gap:8px}.chart-clips .cs-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.6}.chart-clips .cm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}.chart-clips .cm-card{display:flex;flex-direction:column;text-decoration:none;color:inherit;border-radius:10px;overflow:hidden;background:rgba(255,255,255,.03);border:1px solid rgba(244,241,232,.08);transition:transform .15s ease,border-color .15s ease}.chart-clips .cm-card:hover{transform:translateY(-2px);border-color:rgba(145,71,255,.55)}.chart-clips .cm-thumb{position:relative;aspect-ratio:16/9;background:#1a1426 center/cover no-repeat}.chart-clips .cm-dur{position:absolute;right:6px;bottom:6px;font-size:10px;font-weight:600;padding:2px 5px;border-radius:5px;background:rgba(0,0,0,.72);color:#fff}.chart-clips .cm-views{position:absolute;left:6px;bottom:6px;font-size:10px;font-weight:600;padding:2px 5px;border-radius:5px;background:rgba(145,71,255,.78);color:#fff;display:flex;align-items:center;gap:3px}.chart-clips .cm-title{font-size:12px;line-height:1.3;padding:7px 8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.chart-clips .cm-empty{font-size:12px;opacity:.55;padding:4px 0}
+#notifyBtn.is-on{color:#00f5b3;border-color:rgba(0,245,179,.5)}
+#discordBtn.is-on{color:#a0b4ff;border-color:rgba(88,101,242,.6)}
+.kc-modal-backdrop{position:fixed;inset:0;background:rgba(8,6,14,.66);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:90;padding:20px}
+.kc-modal{width:100%;max-width:440px;background:#14101e;border:1px solid rgba(244,241,232,.12);border-radius:16px;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.5);color:#f4f1e8;font-size:14px}
+.kc-modal h3{margin:0 0 4px;font-size:17px;display:flex;align-items:center;gap:8px}
+.kc-modal p.kc-sub{margin:0 0 16px;opacity:.6;font-size:12.5px;line-height:1.5}
+.kc-modal label{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.6;margin:0 0 6px}
+.kc-modal input[type=text]{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(244,241,232,.14);color:#fff;font-size:13px;font-family:inherit}
+.kc-modal input[type=text]:focus{outline:none;border-color:rgba(88,101,242,.7)}
+.kc-modal .kc-status{font-size:12px;margin:12px 0;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,.04)}
+.kc-modal .kc-status b{color:#00f5b3}
+.kc-modal .kc-row{display:flex;align-items:center;gap:8px;margin:12px 0}
+.kc-modal .kc-actions{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap}
+.kc-modal button{padding:9px 14px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid rgba(244,241,232,.16);background:rgba(255,255,255,.05);color:#f4f1e8;font-family:inherit}
+.kc-modal button.kc-primary{background:#5865f2;border-color:#5865f2;color:#fff}
+.kc-modal button.kc-danger{color:#ff7a7a;border-color:rgba(255,122,122,.3)}
+.kc-modal button.kc-ghost{margin-left:auto}
+.kc-modal button:disabled{opacity:.5;cursor:default}</style>
 <script>
 'use strict';
 const fmt=n=> {
@@ -2752,6 +2770,66 @@ function saveTracked(list) {
   }
 }
 state.userTracked=loadTracked();
+// --- Go-live browser notifications --------------------------------------
+const NOTIFY_KEY='kc.notify.v1';
+state.notify=localStorage.getItem(NOTIFY_KEY)==='1';
+state.prevLive=new Map();
+function applyNotifyButton() {
+  const btn=document.getElementById('notifyBtn');
+  if(!btn)return;
+  btn.classList.toggle('is-on', !!state.notify);
+  btn.title=state.notify?'Go-live alerts ON — click to mute':'Click to get a browser alert when a tracked streamer goes live'
+}
+async function toggleNotify() {
+  if(!state.notify) {
+    if(typeof Notification==='undefined') {
+      toast('Not supported', 'This browser cannot show notifications.');
+      return
+    }
+    let perm=Notification.permission;
+    if(perm==='default')perm=await Notification.requestPermission();
+    if(perm!=='granted') {
+      toast('Permission needed', 'Allow notifications in your browser to enable alerts.');
+      return
+    }
+    state.notify=true;
+    localStorage.setItem(NOTIFY_KEY, '1');
+    toast('Alerts on', 'You will be pinged when a tracked streamer goes live.')
+  }
+  else {
+    state.notify=false;
+    localStorage.setItem(NOTIFY_KEY, '0');
+    toast('Alerts muted')
+  }
+  applyNotifyButton()
+}
+function detectGoLive(streamers) {
+  const list=streamers||[];
+  const firstRun=state.prevLive.size===0;
+  list.forEach(s=> {
+    const was=state.prevLive.get(s.login);
+    if(state.notify&&!firstRun&&was===false&&s.is_live) {
+      const body=(s.game_name?s.game_name+' · ':'')+(s.title||'Live on Twitch');
+      try {
+        if(typeof Notification!=='undefined'&&Notification.permission==='granted') {
+          const n=new Notification(s.display_name+' is live', {
+            body, icon:s.profile_image_url||undefined, tag:'live-'+s.login
+          });
+          n.onclick=()=> {
+            window.focus();
+            setSelectedLogin(s.login);
+            n.close()
+          }
+        }
+      }
+      catch(_) {
+
+      }
+      toast('🔴 '+s.display_name+' is live', body)
+    }
+    state.prevLive.set(s.login, !!s.is_live)
+  })
+}
 async function fetchJson(url, options= {
 
 }) {
@@ -3563,6 +3641,8 @@ async function refreshAll(force=false) {
       saveTracked(state.userTracked)
     }
     state.trackedSet=new Set(state.userTracked);
+    detectGoLive(state.dashboard?.streamers||[]);
+    applyNotifyButton();
     if(!state.selectedLogin||!(state.dashboard?.streamers||[]).some(c=>c.login===state.selectedLogin)) {
       const live=(state.dashboard?.streamers||[]).find(c=>c.is_live), fallback=(state.dashboard?.streamers||[])[0], target=live||fallback;
       if(target)state.selectedLogin=target.login
@@ -3614,6 +3694,10 @@ function startRefreshCycle() {
 }
 function wireEvents() {
   document.querySelectorAll('.tab[data-view]').forEach(tab=>tab.addEventListener('click', ()=>setView(tab.dataset.view)));
+  const notifyBtn=document.getElementById('notifyBtn');
+  if(notifyBtn)notifyBtn.addEventListener('click', ()=>toggleNotify());
+  const discordBtn=document.getElementById('discordBtn');
+  if(discordBtn)discordBtn.addEventListener('click', ()=>openDiscordModal());
   document.getElementById('refreshBtn').addEventListener('click', async e=> {
     flash(e.currentTarget);
     toast('Refreshing', 'Pulling fresh data from Twitch.');
@@ -3777,8 +3861,102 @@ function wireEvents() {
     toast('Forecast view', 'Wider canvas for the selected channel.')
   })
 }
+async function refreshDiscordButton() {
+  try {
+    const st=await fetchJson('/api/integrations/discord');
+    const db=document.getElementById('discordBtn');
+    if(db)db.classList.toggle('is-on', !!st.enabled)
+  }
+  catch(e) {
+
+  }
+}
+async function openDiscordModal() {
+  const old=document.querySelector('.kc-modal-backdrop');
+  if(old)old.remove();
+  const backdrop=document.createElement('div');
+  backdrop.className='kc-modal-backdrop';
+  backdrop.innerHTML='<div class="kc-modal" role="dialog" aria-modal="true">'+
+    '<h3>Connect Discord</h3>'+
+    '<p class="kc-sub">Paste a Discord channel webhook URL. KC Live will post a message when your tracked streamers go live and when they hit viewer milestones.</p>'+
+    '<label for="kcWh">Webhook URL</label>'+
+    '<input id="kcWh" type="text" placeholder="https://discord.com/api/webhooks/..." autocomplete="off" spellcheck="false">'+
+    '<div class="kc-status" id="kcWhStatus">Checking…</div>'+
+    '<div class="kc-actions"><button class="kc-primary" id="kcSave">Save &amp; enable</button>'+
+    '<button id="kcTest">Send test</button>'+
+    '<button class="kc-danger" id="kcDisc">Disconnect</button>'+
+    '<button class="kc-ghost" id="kcClose">Close</button></div></div>';
+  document.body.appendChild(backdrop);
+  const close=()=>backdrop.remove();
+  backdrop.addEventListener('click', e=> {
+    if(e.target===backdrop)close()
+  });
+  backdrop.querySelector('#kcClose').addEventListener('click', close);
+  const statusEl=backdrop.querySelector('#kcWhStatus'), whInput=backdrop.querySelector('#kcWh');
+  const setStatus=html=> {
+    statusEl.innerHTML=html
+  };
+  try {
+    const st=await fetchJson('/api/integrations/discord');
+    if(st.configured)setStatus('Status: <b>'+(st.enabled?'connected':'configured (disabled)')+'</b> · '+escHtml(st.webhook_masked));
+    else setStatus('Status: not connected yet.')
+  }
+  catch(e) {
+    setStatus('Status: unavailable.')
+  }
+  backdrop.querySelector('#kcSave').addEventListener('click', async()=> {
+    const v=whInput.value.trim();
+    if(!v) {
+      toast('Enter a webhook URL');
+      return
+    }
+    try {
+      const r=await postJson('/api/integrations/discord',  {
+        webhook:v, enabled:true
+      });
+      setStatus('Status: <b>connected</b> · '+escHtml(r.webhook_masked));
+      refreshDiscordButton();
+      toast('Discord connected', 'Go-live alerts will post to your channel.')
+    }
+    catch(e) {
+      toast('Could not save', e.message)
+    }
+  });
+  backdrop.querySelector('#kcTest').addEventListener('click', async()=> {
+    const v=whInput.value.trim();
+    try {
+      if(v)await postJson('/api/integrations/discord',  {
+        webhook:v, enabled:true
+      });
+      const r=await postJson('/api/integrations/discord/test',  {
+
+      });
+      refreshDiscordButton();
+      toast('Test sent', r.detail||'Check your Discord channel.')
+    }
+    catch(e) {
+      toast('Test failed', e.message)
+    }
+  });
+  backdrop.querySelector('#kcDisc').addEventListener('click', async()=> {
+    try {
+      await postJson('/api/integrations/discord',  {
+        webhook:'', enabled:false
+      });
+      whInput.value='';
+      setStatus('Status: not connected.');
+      refreshDiscordButton();
+      toast('Disconnected', 'Discord alerts turned off.')
+    }
+    catch(e) {
+      toast('Could not disconnect', e.message)
+    }
+  })
+}
 async function boot() {
   wireEvents();
+  applyNotifyButton();
+  refreshDiscordButton();
   await refreshAll(false);
   if(await reRegisterTracked())await refreshAll(true);
   startRefreshCycle();

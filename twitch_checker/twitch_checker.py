@@ -243,11 +243,8 @@ class AppConfig:
             "streamers": self.streamers,
             "streamer_groups": self.streamer_groups,
             "check_interval": self.check_interval,
-            "discord_webhook": file_config.get("discord_webhook", self.discord_webhook),
-            "enable_discord_notifications": file_config.get(
-                "enable_discord_notifications",
-                self.enable_discord_notifications,
-            ),
+            "discord_webhook": self.discord_webhook,
+            "enable_discord_notifications": self.enable_discord_notifications,
             "history_limit": self.history_limit,
             "snapshot_limit": self.snapshot_limit,
             "event_limit": self.event_limit,
@@ -1858,6 +1855,9 @@ class TwitchService:
 
             if any(event["type"] == "went_live" for event in generated_events):
                 self._send_discord_notification(login, display_name, user, stream)
+            for event in generated_events:
+                if event["type"] == "viewer_milestone":
+                    self._send_discord_milestone(login, display_name, event)
 
             if ML_AVAILABLE and is_live:
                 log_stream_snapshot(login, viewer_count, game_name, title)
@@ -2066,6 +2066,19 @@ class TwitchService:
             for name, value in sorted(category_totals.items(), key=lambda item: item[1], reverse=True)
         ][:8]
 
+    def _post_discord_embed(self, embed: dict[str, Any], webhook: str | None = None) -> bool:
+        """Post a single embed to the Discord webhook. Returns True on success."""
+        target = (webhook or self.config.discord_webhook or "").strip()
+        if not target:
+            return False
+        try:
+            response = self.session.post(target, json={"embeds": [embed]}, timeout=DEFAULT_TIMEOUT)
+            response.raise_for_status()
+            return True
+        except requests.RequestException as exc:
+            self.logger.warning("Discord webhook post failed: %s", exc)
+            return False
+
     def _send_discord_notification(
         self,
         login: str,
@@ -2075,28 +2088,71 @@ class TwitchService:
     ) -> None:
         if not self.config.enable_discord_notifications or not self.config.discord_webhook:
             return
+        self._post_discord_embed(
+            {
+                "title": f"🔴 {display_name} just went live",
+                "description": stream.get("title", "Live on Twitch"),
+                "url": f"https://www.twitch.tv/{login}",
+                "color": 15105570,
+                "fields": [
+                    {"name": "Category", "value": stream.get("game_name") or "Unknown", "inline": True},
+                    {"name": "Viewers", "value": str(stream.get("viewer_count", 0)), "inline": True},
+                ],
+                "thumbnail": {"url": user.get("profile_image_url", "")},
+            }
+        )
 
-        content = {
-            "embeds": [
-                {
-                    "title": f"{display_name} just went live",
-                    "description": stream.get("title", "Live on Twitch"),
-                    "url": f"https://www.twitch.tv/{login}",
-                    "color": 15105570,
-                    "fields": [
-                        {"name": "Category", "value": stream.get("game_name", "Unknown"), "inline": True},
-                        {"name": "Viewers", "value": str(stream.get("viewer_count", 0)), "inline": True},
-                    ],
-                    "thumbnail": {"url": user.get("profile_image_url", "")},
-                }
-            ]
+    def _send_discord_milestone(self, login: str, display_name: str, event: dict[str, Any]) -> None:
+        if not self.config.enable_discord_notifications or not self.config.discord_webhook:
+            return
+        self._post_discord_embed(
+            {
+                "title": f"📈 {display_name} hit a viewer milestone",
+                "description": event.get("message", "Viewer milestone reached."),
+                "url": f"https://www.twitch.tv/{login}",
+                "color": 3447003,
+            }
+        )
+
+    def discord_status(self) -> dict[str, Any]:
+        webhook = (self.config.discord_webhook or "").strip()
+        masked = ""
+        if webhook:
+            tail = webhook[-6:]
+            masked = f"…{tail}" if len(webhook) > 6 else "configured"
+        return {
+            "configured": bool(webhook),
+            "enabled": bool(self.config.enable_discord_notifications and webhook),
+            "webhook_masked": masked,
         }
 
-        try:
-            response = self.session.post(self.config.discord_webhook, json=content, timeout=DEFAULT_TIMEOUT)
-            response.raise_for_status()
-        except requests.RequestException as exc:
-            self.logger.warning("Discord notification failed for %s: %s", login, exc)
+    def update_discord_settings(self, webhook: str | None, enabled: bool | None = None) -> dict[str, Any]:
+        if webhook is not None:
+            cleaned = str(webhook).strip()
+            if cleaned and "discord.com/api/webhooks/" not in cleaned and "discordapp.com/api/webhooks/" not in cleaned:
+                raise ValueError("invalid_webhook")
+            self.config.discord_webhook = cleaned
+        if enabled is not None:
+            self.config.enable_discord_notifications = bool(enabled)
+        # Disabling is implied when the webhook is cleared.
+        if not self.config.discord_webhook:
+            self.config.enable_discord_notifications = False
+        self.config.save_to_file()
+        return self.discord_status()
+
+    def send_discord_test(self) -> dict[str, Any]:
+        if not (self.config.discord_webhook or "").strip():
+            raise ValueError("not_configured")
+        ok = self._post_discord_embed(
+            {
+                "title": "✅ KC Live is connected",
+                "description": "This channel will now receive go-live and viewer-milestone alerts for your tracked streamers.",
+                "color": 5763719,
+            }
+        )
+        if not ok:
+            raise ValueError("delivery_failed")
+        return {"ok": True, "detail": "Test message delivered to Discord."}
 
 
 def build_logger() -> logging.Logger:
@@ -2122,6 +2178,9 @@ def create_app() -> Flask:
                 "already_tracked": "That streamer is already in the watchlist.",
                 "not_found": "That Twitch channel could not be found.",
                 "not_tracked": "That streamer is not currently being tracked.",
+                "invalid_webhook": "That does not look like a Discord webhook URL.",
+                "not_configured": "Add a Discord webhook URL first.",
+                "delivery_failed": "Discord rejected the message. Check that the webhook URL is still valid.",
             }
             return jsonify({"error": code, "detail": message_map.get(code, code)}), 400
         except requests.RequestException as exc:
@@ -2325,6 +2384,21 @@ def create_app() -> Flask:
     def search() -> Any:
         query = request.args.get("q", "").strip()
         return json_service_response(lambda: service.search_streamers(query))
+
+    @app.get("/api/integrations/discord")
+    def discord_get() -> Any:
+        return jsonify(service.discord_status())
+
+    @app.post("/api/integrations/discord")
+    def discord_set() -> Any:
+        payload = request.get_json(silent=True) or {}
+        webhook = payload.get("webhook")
+        enabled = payload.get("enabled")
+        return json_service_response(lambda: service.update_discord_settings(webhook, enabled))
+
+    @app.post("/api/integrations/discord/test")
+    def discord_test() -> Any:
+        return json_service_response(service.send_discord_test)
 
     @app.post("/api/watchlist")
     def add_watchlist() -> Any:
