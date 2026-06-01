@@ -298,6 +298,17 @@ class AppRoutesTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(payload["videos"][0]["duration"], "3h10m")
 
+    def test_signal_lab_includes_tracking_block(self) -> None:
+        from twitch_checker.twitch_checker import build_logger, load_config
+
+        service = TwitchService(load_config(), build_logger())
+        result = service.get_signal_lab("kaicenat", 30)
+
+        self.assertIn("tracking", result)
+        self.assertIn("tracking_since", result["tracking"])
+        self.assertIn("days_tracked", result["tracking"])
+        self.assertIn("active_days_recorded", result["tracking"])
+
     def test_discord_status_route(self) -> None:
         with patch.object(
             TwitchService,

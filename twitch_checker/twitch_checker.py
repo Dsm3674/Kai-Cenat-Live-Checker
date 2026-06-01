@@ -1018,6 +1018,26 @@ class TwitchService:
         )
         activity = self._build_activity_heatmap(normalized, selected_sessions, selected_live)
 
+        # When did we first start collecting data for this channel? Use the
+        # earliest session/snapshot we have on record across all of history.
+        tracking_stamps: list[Any] = []
+        for session in selected_sessions:
+            stamp = parse_timestamp(session.get("started_at"))
+            if stamp:
+                tracking_stamps.append(stamp)
+        for point in snapshots_by_login.get(normalized, []):
+            stamp = parse_timestamp(point.get("timestamp"))
+            if stamp:
+                tracking_stamps.append(stamp)
+        tracking_since = min(tracking_stamps) if tracking_stamps else None
+        tracking = {
+            "tracking_since": tracking_since.isoformat() if tracking_since else None,
+            "days_tracked": (utc_now() - tracking_since).days if tracking_since else 0,
+            "sessions_recorded": len(selected_sessions),
+            "snapshots_recorded": len(snapshots_by_login.get(normalized, [])),
+            "active_days_recorded": len({s["date"] for s in activity.get("days", [])}),
+        }
+
         return {
             "generated_at": utc_now_iso(),
             "login": normalized,
@@ -1059,6 +1079,7 @@ class TwitchService:
             },
             "timeline": timeline,
             "activity": activity,
+            "tracking": tracking,
         }
 
     def _build_signal_timeline(
